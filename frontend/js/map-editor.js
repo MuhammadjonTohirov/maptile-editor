@@ -2,6 +2,7 @@ class MapEditor {
     constructor() {
         this.selectedFeature = null;
         this.currentInteraction = null;
+        this.polygonModify = null;
         this.initMap();
         this.initLayers();
         this.initInteractions();
@@ -139,6 +140,7 @@ class MapEditor {
     getFeatureStyle(feature) {
         const geometry = feature.getGeometry();
         const geometryType = geometry.getType();
+        const isInPolygonEditMode = feature.get('polygon_edit_mode') === true;
         
         let style;
         switch (geometryType) {
@@ -161,8 +163,13 @@ class MapEditor {
                 break;
             case 'Polygon':
                 style = new ol.style.Style({
-                    fill: new ol.style.Fill({ color: 'rgba(0, 124, 186, 0.3)' }),
-                    stroke: new ol.style.Stroke({ color: '#007cba', width: 2 })
+                    fill: new ol.style.Fill({ 
+                        color: isInPolygonEditMode ? 'rgba(255, 107, 53, 0.3)' : 'rgba(0, 124, 186, 0.3)' 
+                    }),
+                    stroke: new ol.style.Stroke({ 
+                        color: isInPolygonEditMode ? '#ff6b35' : '#007cba', 
+                        width: isInPolygonEditMode ? 3 : 2 
+                    })
                 });
                 break;
             default:
@@ -178,6 +185,22 @@ class MapEditor {
         }
         
         return style;
+    }
+
+    getVertexStyle(feature, resolution) {
+        // Style for polygon vertices (draggable handles)
+        return new ol.style.Style({
+            image: new ol.style.Circle({
+                radius: 8,
+                fill: new ol.style.Fill({
+                    color: 'white'
+                }),
+                stroke: new ol.style.Stroke({
+                    color: '#007cba',
+                    width: 3
+                })
+            })
+        });
     }
 
     initInteractions() {
@@ -196,8 +219,20 @@ class MapEditor {
             type: 'Polygon'
         });
 
+        // Enhanced modify interaction with custom vertex styling - always active
         this.modify = new ol.interaction.Modify({
-            source: this.vectorSource
+            source: this.vectorSource,
+            style: this.getVertexStyle.bind(this)
+        });
+
+        // Add modify end event to auto-save when polygon is changed
+        this.modify.on('modifyend', (event) => {
+            const modifiedFeature = event.features.getArray()[0];
+            if (modifiedFeature) {
+                console.log('Polygon modified - auto-saving...');
+                this.selectedFeature = modifiedFeature;
+                this.autoSaveModifiedFeature(modifiedFeature);
+            }
         });
 
         this.select = new ol.interaction.Select({
@@ -213,6 +248,10 @@ class MapEditor {
                 this.hideFeatureInfo();
             }
         });
+
+        // Always add select and modify interactions so polygons are always selectable and editable
+        this.map.addInteraction(this.select);
+        this.map.addInteraction(this.modify);
 
         [this.drawPoint, this.drawLine, this.drawPolygon].forEach(interaction => {
             interaction.on('drawend', (event) => {
@@ -235,9 +274,6 @@ class MapEditor {
             this.setActiveInteraction('polygon');
         });
 
-        document.getElementById('modify').addEventListener('click', () => {
-            this.setActiveInteraction('modify');
-        });
 
         document.getElementById('select').addEventListener('click', () => {
             this.setActiveInteraction('select');
@@ -296,10 +332,6 @@ class MapEditor {
                 this.currentInteraction = this.drawPolygon;
                 document.getElementById('draw-polygon').classList.add('active');
                 break;
-            case 'modify':
-                this.currentInteraction = this.modify;
-                document.getElementById('modify').classList.add('active');
-                break;
             case 'select':
                 this.currentInteraction = this.select;
                 document.getElementById('select').classList.add('active');
@@ -308,6 +340,39 @@ class MapEditor {
 
         if (this.currentInteraction) {
             this.map.addInteraction(this.currentInteraction);
+        }
+    }
+
+
+    autoSaveModifiedFeature(feature) {
+        const properties = feature.get('properties') || {};
+        
+        const geometry = feature.getGeometry();
+        const geoJsonGeometry = new ol.format.GeoJSON().writeGeometry(geometry, {
+            dataProjection: 'EPSG:4326',
+            featureProjection: 'EPSG:3857'
+        });
+        
+        // Ensure geometry is an object, not a string
+        const geometryObj = typeof geoJsonGeometry === 'string' ? JSON.parse(geoJsonGeometry) : geoJsonGeometry;
+        
+        const featureData = {
+            name: properties.name || feature.get('name') || '',
+            description: properties.description || feature.get('description') || '',
+            geometry: geometryObj,
+            properties: properties,
+            building_number: properties.building_number || feature.get('building_number') || '',
+            building_type: properties.building_type || feature.get('building_type') || '',
+            icon: properties.icon || feature.get('icon') || '',
+            osm_id: feature.get('osm_id') || null
+        };
+
+        const featureId = feature.get('id');
+        
+        if (featureId) {
+            this.updateFeatureOnServer(featureId, featureData);
+        } else {
+            this.createFeatureOnServer(featureData);
         }
     }
 
