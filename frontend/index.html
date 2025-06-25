@@ -107,6 +107,11 @@
             <button id="load-features">Load Features</button>
             <button id="my-location">📍 My Location</button>
         </div>
+        
+        <div class="control-group">
+            <label>Building Data</label>
+            <button id="load-buildings">🏢 Load Buildings</button>
+        </div>
     </div>
     
     <div class="feature-info" id="feature-info">
@@ -114,6 +119,30 @@
         <div class="feature-form">
             <input type="text" id="feature-name" placeholder="Feature Name">
             <textarea id="feature-description" placeholder="Feature Description"></textarea>
+            <input type="text" id="building-number" placeholder="Building Number">
+            <select id="building-type">
+                <option value="">Select Building Type</option>
+                <option value="residential">Residential</option>
+                <option value="commercial">Commercial</option>
+                <option value="industrial">Industrial</option>
+                <option value="office">Office</option>
+                <option value="retail">Retail</option>
+                <option value="warehouse">Warehouse</option>
+                <option value="other">Other</option>
+            </select>
+            <select id="building-icon">
+                <option value="">Select Icon</option>
+                <option value="🏠">🏠 House</option>
+                <option value="🏢">🏢 Office Building</option>
+                <option value="🏬">🏬 Store</option>
+                <option value="🏭">🏭 Factory</option>
+                <option value="🏪">🏪 Shop</option>
+                <option value="🏫">🏫 School</option>
+                <option value="🏥">🏥 Hospital</option>
+                <option value="🏨">🏨 Hotel</option>
+                <option value="⛪">⛪ Church</option>
+                <option value="🕌">🕌 Mosque</option>
+            </select>
             <button id="save-feature">Save Feature</button>
             <button id="cancel-edit">Cancel</button>
         </div>

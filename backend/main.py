@@ -6,6 +6,7 @@ from geoalchemy2.functions import ST_AsGeoJSON
 from geoalchemy2.shape import from_shape
 from shapely.geometry import shape
 import json
+import httpx
 from typing import List
 
 from database import get_db
@@ -101,7 +102,11 @@ async def create_feature(feature: FeatureCreate, db: AsyncSession = Depends(get_
             name=feature.name,
             description=feature.description,
             geometry=geometry_wkt,
-            properties=feature.properties
+            properties=feature.properties,
+            building_number=feature.building_number,
+            building_type=feature.building_type,
+            icon=feature.icon,
+            osm_id=feature.osm_id
         )
         
         db.add(db_feature)
@@ -114,6 +119,10 @@ async def create_feature(feature: FeatureCreate, db: AsyncSession = Depends(get_
             description=db_feature.description,
             geometry=feature.geometry,
             properties=db_feature.properties,
+            building_number=db_feature.building_number,
+            building_type=db_feature.building_type,
+            icon=db_feature.icon,
+            osm_id=db_feature.osm_id,
             created_at=db_feature.created_at,
             updated_at=db_feature.updated_at
         )
@@ -144,6 +153,15 @@ async def update_feature(
         if feature_update.geometry is not None:
             geometry_shape = shape(feature_update.geometry)
             update_data["geometry"] = from_shape(geometry_shape, srid=4326)
+        # Building-specific updates
+        if feature_update.building_number is not None:
+            update_data["building_number"] = feature_update.building_number
+        if feature_update.building_type is not None:
+            update_data["building_type"] = feature_update.building_type
+        if feature_update.icon is not None:
+            update_data["icon"] = feature_update.icon
+        if feature_update.osm_id is not None:
+            update_data["osm_id"] = feature_update.osm_id
         
         if update_data:
             await db.execute(
@@ -158,6 +176,10 @@ async def update_feature(
             description=db_feature.description,
             geometry=feature_update.geometry or {},
             properties=db_feature.properties,
+            building_number=db_feature.building_number,
+            building_type=db_feature.building_type,
+            icon=db_feature.icon,
+            osm_id=db_feature.osm_id,
             created_at=db_feature.created_at,
             updated_at=db_feature.updated_at
         )
@@ -181,6 +203,93 @@ async def delete_feature(feature_id: int, db: AsyncSession = Depends(get_db)):
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=400, detail=f"Error deleting feature: {str(e)}")
+
+@app.post("/load-osm-buildings")
+async def load_osm_buildings(
+    bounds: dict,  # {"north": 40.7589, "south": 40.7489, "east": -73.9441, "west": -73.9641}
+    db: AsyncSession = Depends(get_db)
+):
+    """Load building data from OpenStreetMap for the given bounds"""
+    try:
+        # Construct Overpass API query for buildings
+        overpass_query = f"""
+        [out:json][timeout:25];
+        (
+          way["building"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          relation["building"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+        );
+        out geom;
+        """
+        
+        # Query Overpass API
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://overpass-api.de/api/interpreter",
+                data=overpass_query,
+                headers={"Content-Type": "text/plain"}
+            )
+            
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to fetch OSM data")
+            
+        osm_data = response.json()
+        buildings_loaded = 0
+        
+        # Process OSM buildings
+        for element in osm_data.get('elements', []):
+            if element.get('type') in ['way', 'relation'] and 'building' in element.get('tags', {}):
+                # Create geometry from OSM coordinates
+                if element['type'] == 'way' and 'geometry' in element:
+                    coords = [[node['lon'], node['lat']] for node in element['geometry']]
+                    
+                    # Close polygon if not closed
+                    if coords[0] != coords[-1]:
+                        coords.append(coords[0])
+                    
+                    geometry = {
+                        "type": "Polygon",
+                        "coordinates": [coords]
+                    }
+                    
+                    tags = element.get('tags', {})
+                    
+                    # Check if we already have this OSM building
+                    existing = await db.execute(
+                        select(Feature).where(Feature.osm_id == str(element['id']))
+                    )
+                    if existing.scalar_one_or_none():
+                        continue  # Skip if already exists
+                    
+                    # Create feature from OSM data
+                    geometry_shape = shape(geometry)
+                    geometry_wkt = from_shape(geometry_shape, srid=4326)
+                    
+                    building_feature = Feature(
+                        name=tags.get('name', ''),
+                        description=f"Building from OSM (ID: {element['id']})",
+                        geometry=geometry_wkt,
+                        building_number=tags.get('addr:housenumber', ''),
+                        building_type=tags.get('building', 'yes'),
+                        osm_id=str(element['id']),
+                        properties={
+                            'osm_tags': tags,
+                            'source': 'openstreetmap'
+                        }
+                    )
+                    
+                    db.add(building_feature)
+                    buildings_loaded += 1
+        
+        await db.commit()
+        
+        return {
+            "message": f"Loaded {buildings_loaded} buildings from OpenStreetMap",
+            "buildings_loaded": buildings_loaded
+        }
+        
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error loading OSM buildings: {str(e)}")
 
 @app.get("/health")
 async def health_check():

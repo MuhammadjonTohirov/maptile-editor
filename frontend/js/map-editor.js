@@ -270,6 +270,10 @@ class MapEditor {
         document.getElementById('my-location').addEventListener('click', () => {
             this.getUserLocation();
         });
+
+        document.getElementById('load-buildings').addEventListener('click', () => {
+            this.loadOSMBuildings();
+        });
     }
 
     setActiveInteraction(type) {
@@ -309,8 +313,11 @@ class MapEditor {
 
     showFeatureInfo(feature) {
         const properties = feature.get('properties') || {};
-        document.getElementById('feature-name').value = properties.name || '';
-        document.getElementById('feature-description').value = properties.description || '';
+        document.getElementById('feature-name').value = properties.name || feature.get('name') || '';
+        document.getElementById('feature-description').value = properties.description || feature.get('description') || '';
+        document.getElementById('building-number').value = properties.building_number || feature.get('building_number') || '';
+        document.getElementById('building-type').value = properties.building_type || feature.get('building_type') || '';
+        document.getElementById('building-icon').value = properties.icon || feature.get('icon') || '';
         document.getElementById('feature-info').style.display = 'block';
     }
 
@@ -342,10 +349,16 @@ class MapEditor {
 
         const name = document.getElementById('feature-name').value;
         const description = document.getElementById('feature-description').value;
+        const buildingNumber = document.getElementById('building-number').value;
+        const buildingType = document.getElementById('building-type').value;
+        const icon = document.getElementById('building-icon').value;
         
         const properties = {
             name: name,
             description: description,
+            building_number: buildingNumber,
+            building_type: buildingType,
+            icon: icon,
             ...this.selectedFeature.get('properties')
         };
         
@@ -364,7 +377,11 @@ class MapEditor {
             name: name,
             description: description,
             geometry: geometryObj,
-            properties: properties
+            properties: properties,
+            building_number: buildingNumber,
+            building_type: buildingType,
+            icon: icon,
+            osm_id: this.selectedFeature.get('osm_id') || null
         };
 
         console.log('Saving feature data:', featureData);
@@ -459,6 +476,15 @@ class MapEditor {
                     });
                     olFeature.set('id', feature.id);
                     olFeature.set('properties', feature.properties);
+                    
+                    // Set building-specific properties
+                    olFeature.set('name', feature.properties.name || '');
+                    olFeature.set('description', feature.properties.description || '');
+                    olFeature.set('building_number', feature.properties.building_number || '');
+                    olFeature.set('building_type', feature.properties.building_type || '');
+                    olFeature.set('icon', feature.properties.icon || '');
+                    olFeature.set('osm_id', feature.properties.osm_id || '');
+                    
                     this.vectorSource.addFeature(olFeature);
                 });
                 
@@ -524,6 +550,53 @@ class MapEditor {
         }
         
         alert(`Saved ${savedCount} features`);
+    }
+
+    async loadOSMBuildings() {
+        const view = this.map.getView();
+        const extent = view.calculateExtent(this.map.getSize());
+        const [minX, minY, maxX, maxY] = ol.proj.transformExtent(extent, 'EPSG:3857', 'EPSG:4326');
+        
+        const bounds = {
+            west: minX,
+            south: minY,
+            east: maxX,
+            north: maxY
+        };
+
+        const button = document.getElementById('load-buildings');
+        const originalText = button.textContent;
+        button.textContent = '🔄 Loading buildings...';
+        button.disabled = true;
+
+        try {
+            const response = await fetch('/api/load-osm-buildings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(bounds)
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log('OSM buildings loaded:', result);
+                alert(`Loaded ${result.buildings_loaded} buildings from OpenStreetMap`);
+                
+                // Reload features to show the new buildings
+                await this.loadFeatures();
+            } else {
+                const errorText = await response.text();
+                console.error('Failed to load OSM buildings:', response.status, errorText);
+                alert(`Failed to load buildings: ${response.status} - ${errorText}`);
+            }
+        } catch (error) {
+            console.error('Error loading OSM buildings:', error);
+            alert('Error loading buildings from OpenStreetMap');
+        } finally {
+            button.textContent = originalText;
+            button.disabled = false;
+        }
     }
 }
 

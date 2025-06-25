@@ -11,5 +11,10 @@ class Feature(Base):
     description = Column(Text)
     geometry = Column(Geometry("GEOMETRY", srid=4326))
     properties = Column(JSONB, default={})
+    # Building-specific columns
+    building_number = Column(String(50))
+    building_type = Column(String(100))
+    icon = Column(String(100))
+    osm_id = Column(String(50), index=True)  # For referencing OSM data
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

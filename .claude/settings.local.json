@@ -12,7 +12,8 @@
       "Bash(source:*)",
       "Bash(pip install:*)",
       "Bash(rm:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(docker exec:*)"
     ],
     "deny": []
   }

@@ -7,6 +7,11 @@ class FeatureBase(BaseModel):
     description: Optional[str] = None
     geometry: Dict[str, Any]
     properties: Dict[str, Any] = {}
+    # Building-specific properties
+    building_number: Optional[str] = None
+    building_type: Optional[str] = None
+    icon: Optional[str] = None
+    osm_id: Optional[str] = None  # Reference to original OSM data
 
 class FeatureCreate(FeatureBase):
     pass
@@ -16,6 +21,11 @@ class FeatureUpdate(BaseModel):
     description: Optional[str] = None
     geometry: Optional[Dict[str, Any]] = None
     properties: Optional[Dict[str, Any]] = None
+    # Building-specific properties
+    building_number: Optional[str] = None
+    building_type: Optional[str] = None
+    icon: Optional[str] = None
+    osm_id: Optional[str] = None
 
 class FeatureResponse(FeatureBase):
     id: int
