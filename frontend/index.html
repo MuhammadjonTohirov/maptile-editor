@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map Editor</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@8.1.0/ol.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        
+        #map {
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .control-group {
+            margin-bottom: 10px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        button {
+            margin: 2px;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 3px;
+            background: #007cba;
+            color: white;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background: #005a87;
+        }
+        
+        button.active {
+            background: #ff6b35;
+        }
+        
+        .feature-info {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            max-width: 300px;
+            display: none;
+        }
+        
+        .feature-form {
+            margin-top: 10px;
+        }
+        
+        .feature-form input, .feature-form textarea {
+            width: 100%;
+            margin: 5px 0;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+        
+        .feature-form textarea {
+            height: 60px;
+            resize: vertical;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div class="controls">
+        <div class="control-group">
+            <label>Drawing Tools</label>
+            <button id="draw-point">Draw Point</button>
+            <button id="draw-line">Draw Line</button>
+            <button id="draw-polygon">Draw Polygon</button>
+            <button id="modify">Modify</button>
+            <button id="select">Select</button>
+            <button id="delete">Delete</button>
+        </div>
+        
+        <div class="control-group">
+            <button id="clear-all">Clear All</button>
+            <button id="save-all">Save All</button>
+            <button id="load-features">Load Features</button>
+            <button id="my-location">📍 My Location</button>
+        </div>
+    </div>
+    
+    <div class="feature-info" id="feature-info">
+        <h4>Feature Properties</h4>
+        <div class="feature-form">
+            <input type="text" id="feature-name" placeholder="Feature Name">
+            <textarea id="feature-description" placeholder="Feature Description"></textarea>
+            <button id="save-feature">Save Feature</button>
+            <button id="cancel-edit">Cancel</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/ol@8.1.0/dist/ol.js"></script>
+    <script src="js/map-editor.js"></script>
+</body>
+</html>

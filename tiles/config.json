@@ -1,0 +1,10 @@
+{
+  "options": {
+    "paths": {
+      "root": "/data",
+      "mbtiles": "/data"
+    }
+  },
+  "styles": {},
+  "data": {}
+}
