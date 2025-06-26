@@ -106,7 +106,12 @@ async def create_feature(feature: FeatureCreate, db: AsyncSession = Depends(get_
             building_number=feature.building_number,
             building_type=feature.building_type,
             icon=feature.icon,
-            osm_id=feature.osm_id
+            osm_id=feature.osm_id,
+            road_type=feature.road_type,
+            direction=feature.direction,
+            lane_count=feature.lane_count,
+            max_speed=feature.max_speed,
+            surface=feature.surface
         )
         
         db.add(db_feature)
@@ -162,6 +167,17 @@ async def update_feature(
             update_data["icon"] = feature_update.icon
         if feature_update.osm_id is not None:
             update_data["osm_id"] = feature_update.osm_id
+        # Road-specific updates
+        if feature_update.road_type is not None:
+            update_data["road_type"] = feature_update.road_type
+        if feature_update.direction is not None:
+            update_data["direction"] = feature_update.direction
+        if feature_update.lane_count is not None:
+            update_data["lane_count"] = feature_update.lane_count
+        if feature_update.max_speed is not None:
+            update_data["max_speed"] = feature_update.max_speed
+        if feature_update.surface is not None:
+            update_data["surface"] = feature_update.surface
         
         if update_data:
             await db.execute(
@@ -290,6 +306,351 @@ async def load_osm_buildings(
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=400, detail=f"Error loading OSM buildings: {str(e)}")
+
+@app.post("/load-osm-roads")
+async def load_osm_roads(
+    bounds: dict,  # {"north": 40.7589, "south": 40.7489, "east": -73.9441, "west": -73.9641}
+    db: AsyncSession = Depends(get_db)
+):
+    """Load road data from OpenStreetMap for the given bounds"""
+    try:
+        # Construct Overpass API query for roads (highways)
+        overpass_query = f"""
+        [out:json][timeout:25];
+        (
+          way["highway"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+        );
+        out geom;
+        """
+        
+        # Query Overpass API
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://overpass-api.de/api/interpreter",
+                data=overpass_query,
+                headers={"Content-Type": "text/plain"}
+            )
+            
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to fetch OSM data")
+            
+        osm_data = response.json()
+        roads_loaded = 0
+        
+        # Process OSM roads
+        for element in osm_data.get('elements', []):
+            if element.get('type') == 'way' and 'highway' in element.get('tags', {}):
+                # Create geometry from OSM coordinates
+                if 'geometry' in element:
+                    coords = [[node['lon'], node['lat']] for node in element['geometry']]
+                    
+                    geometry = {
+                        "type": "LineString",
+                        "coordinates": coords
+                    }
+                    
+                    tags = element.get('tags', {})
+                    highway_type = tags.get('highway', 'unknown')
+                    
+                    # Check if we already have this OSM road
+                    existing = await db.execute(
+                        select(Feature).where(Feature.osm_id == str(element['id']))
+                    )
+                    if existing.scalar_one_or_none():
+                        continue  # Skip if already exists
+                    
+                    # Determine direction
+                    direction = 'bidirectional'  # default
+                    if tags.get('oneway') == 'yes':
+                        direction = 'oneway'
+                    elif tags.get('oneway') == '-1':
+                        direction = 'oneway_reverse'
+                    
+                    # Extract road properties
+                    lane_count = None
+                    if tags.get('lanes'):
+                        try:
+                            lane_count = int(tags.get('lanes'))
+                        except ValueError:
+                            pass
+                    
+                    max_speed = None
+                    if tags.get('maxspeed'):
+                        try:
+                            speed_str = tags.get('maxspeed').replace(' mph', '').replace(' km/h', '')
+                            max_speed = int(speed_str)
+                        except ValueError:
+                            pass
+                    
+                    # Create feature from OSM road data
+                    geometry_shape = shape(geometry)
+                    geometry_wkt = from_shape(geometry_shape, srid=4326)
+                    
+                    road_feature = Feature(
+                        name=tags.get('name', f'{highway_type.title()} Road'),
+                        description=f"Road from OSM (ID: {element['id']})",
+                        geometry=geometry_wkt,
+                        road_type=highway_type,
+                        direction=direction,
+                        lane_count=lane_count,
+                        max_speed=max_speed,
+                        surface=tags.get('surface', ''),
+                        osm_id=str(element['id']),
+                        properties={
+                            'osm_tags': tags,
+                            'source': 'openstreetmap',
+                            'feature_type': 'road'
+                        }
+                    )
+                    
+                    db.add(road_feature)
+                    roads_loaded += 1
+        
+        await db.commit()
+        
+        return {
+            "message": f"Loaded {roads_loaded} roads from OpenStreetMap",
+            "roads_loaded": roads_loaded
+        }
+        
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error loading OSM roads: {str(e)}")
+
+@app.post("/load-osm-streetlights")
+async def load_osm_streetlights(
+    bounds: dict,  # {"north": 40.7589, "south": 40.7489, "east": -73.9441, "west": -73.9641}
+    db: AsyncSession = Depends(get_db)
+):
+    """Load street light data from OpenStreetMap for the given bounds"""
+    try:
+        # Construct Overpass API query for street lights
+        overpass_query = f"""
+        [out:json][timeout:25];
+        (
+          node["highway"="street_lamp"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          node["amenity"="street_lamp"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          node["man_made"="street_lamp"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          node["lighting"="street_lamp"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+        );
+        out geom;
+        """
+        
+        # Query Overpass API
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://overpass-api.de/api/interpreter",
+                data=overpass_query,
+                headers={"Content-Type": "text/plain"}
+            )
+            
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to fetch OSM data")
+            
+        osm_data = response.json()
+        streetlights_loaded = 0
+        
+        # Process OSM street lights
+        for element in osm_data.get('elements', []):
+            if element.get('type') == 'node' and 'lat' in element and 'lon' in element:
+                tags = element.get('tags', {})
+                
+                # Check if this is actually a street light
+                is_streetlight = (
+                    tags.get('highway') == 'street_lamp' or
+                    tags.get('amenity') == 'street_lamp' or
+                    tags.get('man_made') == 'street_lamp' or
+                    tags.get('lighting') == 'street_lamp'
+                )
+                
+                if not is_streetlight:
+                    continue
+                
+                # Check if we already have this OSM street light
+                existing = await db.execute(
+                    select(Feature).where(Feature.osm_id == str(element['id']))
+                )
+                if existing.scalar_one_or_none():
+                    continue  # Skip if already exists
+                
+                # Create point geometry from OSM coordinates
+                geometry = {
+                    "type": "Point",
+                    "coordinates": [element['lon'], element['lat']]
+                }
+                
+                # Determine street light properties
+                light_type = 'street_lamp'
+                if tags.get('lamp_type'):
+                    light_type = tags.get('lamp_type')
+                elif tags.get('light_source'):
+                    light_type = tags.get('light_source')
+                
+                height = None
+                if tags.get('height'):
+                    try:
+                        height_str = tags.get('height').replace('m', '').replace(' ', '')
+                        height = float(height_str)
+                    except ValueError:
+                        pass
+                
+                # Create feature from OSM street light data
+                geometry_shape = shape(geometry)
+                geometry_wkt = from_shape(geometry_shape, srid=4326)
+                
+                streetlight_feature = Feature(
+                    name=f"Street Light ({light_type})",
+                    description=f"Street light from OSM (ID: {element['id']})",
+                    geometry=geometry_wkt,
+                    icon='💡',
+                    osm_id=str(element['id']),
+                    properties={
+                        'osm_tags': tags,
+                        'source': 'openstreetmap',
+                        'feature_type': 'streetlight',
+                        'light_type': light_type,
+                        'height': height,
+                        'lamp_mount': tags.get('lamp_mount', ''),
+                        'support': tags.get('support', ''),
+                        'operator': tags.get('operator', '')
+                    }
+                )
+                
+                db.add(streetlight_feature)
+                streetlights_loaded += 1
+        
+        await db.commit()
+        
+        return {
+            "message": f"Loaded {streetlights_loaded} street lights from OpenStreetMap",
+            "streetlights_loaded": streetlights_loaded
+        }
+        
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error loading OSM street lights: {str(e)}")
+
+@app.post("/load-osm-traffic-lights")
+async def load_osm_traffic_lights(
+    bounds: dict,  # {"north": 40.7589, "south": 40.7489, "east": -73.9441, "west": -73.9641}
+    db: AsyncSession = Depends(get_db)
+):
+    """Load traffic light data from OpenStreetMap for the given bounds"""
+    try:
+        # Construct Overpass API query for traffic lights
+        overpass_query = f"""
+        [out:json][timeout:25];
+        (
+          node["highway"="traffic_signals"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          node["traffic_signals"="signal"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          node["amenity"="traffic_light"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+        );
+        out geom;
+        """
+        
+        # Query Overpass API
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://overpass-api.de/api/interpreter",
+                data=overpass_query,
+                headers={"Content-Type": "text/plain"}
+            )
+            
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to fetch OSM data")
+            
+        osm_data = response.json()
+        traffic_lights_loaded = 0
+        
+        # Process OSM traffic lights
+        for element in osm_data.get('elements', []):
+            if element.get('type') == 'node' and 'lat' in element and 'lon' in element:
+                tags = element.get('tags', {})
+                
+                # Check if this is actually a traffic light
+                is_traffic_light = (
+                    tags.get('highway') == 'traffic_signals' or
+                    tags.get('traffic_signals') == 'signal' or
+                    tags.get('amenity') == 'traffic_light'
+                )
+                
+                if not is_traffic_light:
+                    continue
+                
+                # Check if we already have this OSM traffic light
+                existing = await db.execute(
+                    select(Feature).where(Feature.osm_id == str(element['id']))
+                )
+                if existing.scalar_one_or_none():
+                    continue  # Skip if already exists
+                
+                # Create point geometry from OSM coordinates
+                geometry = {
+                    "type": "Point",
+                    "coordinates": [element['lon'], element['lat']]
+                }
+                
+                # Determine traffic light properties
+                signal_type = 'traffic_signals'
+                if tags.get('traffic_signals:direction'):
+                    signal_type = f"traffic_signals ({tags.get('traffic_signals:direction')})"
+                
+                # Check for pedestrian signals
+                has_pedestrian = tags.get('traffic_signals:pedestrian') == 'yes'
+                has_sound = tags.get('traffic_signals:sound') == 'yes'
+                has_vibration = tags.get('traffic_signals:vibration') == 'yes'
+                
+                # Get timing information
+                cycle_time = None
+                if tags.get('cycle_time'):
+                    try:
+                        cycle_time = int(tags.get('cycle_time'))
+                    except ValueError:
+                        pass
+                
+                # Create feature from OSM traffic light data
+                geometry_shape = shape(geometry)
+                geometry_wkt = from_shape(geometry_shape, srid=4326)
+                
+                traffic_light_name = "Traffic Light"
+                if tags.get('ref'):
+                    traffic_light_name = f"Traffic Light {tags.get('ref')}"
+                
+                traffic_light_feature = Feature(
+                    name=traffic_light_name,
+                    description=f"Traffic light from OSM (ID: {element['id']})",
+                    geometry=geometry_wkt,
+                    icon='🚦',
+                    osm_id=str(element['id']),
+                    properties={
+                        'osm_tags': tags,
+                        'source': 'openstreetmap',
+                        'feature_type': 'traffic_light',
+                        'signal_type': signal_type,
+                        'has_pedestrian': has_pedestrian,
+                        'has_sound': has_sound,
+                        'has_vibration': has_vibration,
+                        'cycle_time': cycle_time,
+                        'direction': tags.get('traffic_signals:direction', ''),
+                        'arrow': tags.get('traffic_signals:arrow', ''),
+                        'operator': tags.get('operator', ''),
+                        'ref': tags.get('ref', '')
+                    }
+                )
+                
+                db.add(traffic_light_feature)
+                traffic_lights_loaded += 1
+        
+        await db.commit()
+        
+        return {
+            "message": f"Loaded {traffic_lights_loaded} traffic lights from OpenStreetMap",
+            "traffic_lights_loaded": traffic_lights_loaded
+        }
+        
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error loading OSM traffic lights: {str(e)}")
 
 @app.get("/health")
 async def health_check():

@@ -12,6 +12,12 @@ class FeatureBase(BaseModel):
     building_type: Optional[str] = None
     icon: Optional[str] = None
     osm_id: Optional[str] = None  # Reference to original OSM data
+    # Road-specific properties
+    road_type: Optional[str] = None
+    direction: Optional[str] = None
+    lane_count: Optional[int] = None
+    max_speed: Optional[int] = None
+    surface: Optional[str] = None
 
 class FeatureCreate(FeatureBase):
     pass
@@ -26,6 +32,12 @@ class FeatureUpdate(BaseModel):
     building_type: Optional[str] = None
     icon: Optional[str] = None
     osm_id: Optional[str] = None
+    # Road-specific properties
+    road_type: Optional[str] = None
+    direction: Optional[str] = None
+    lane_count: Optional[int] = None
+    max_speed: Optional[int] = None
+    surface: Optional[str] = None
 
 class FeatureResponse(FeatureBase):
     id: int

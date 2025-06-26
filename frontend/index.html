@@ -56,6 +56,15 @@
             background: #ff6b35;
         }
         
+        .toggle-button {
+            background: #dc3545 !important;
+            font-weight: bold;
+        }
+        
+        .toggle-button.editing-enabled {
+            background: #28a745 !important;
+        }
+        
         .feature-info {
             position: absolute;
             bottom: 10px;
@@ -93,6 +102,7 @@
     <div class="controls">
         <div class="control-group">
             <label>Drawing Tools</label>
+            <button id="toggle-editing" class="toggle-button">🔒 Lock Editing</button>
             <button id="draw-point">Draw Point</button>
             <button id="draw-line">Draw Line</button>
             <button id="draw-polygon">Draw Polygon</button>
@@ -108,8 +118,18 @@
         </div>
         
         <div class="control-group">
-            <label>Building Data</label>
+            <label>Map Data</label>
             <button id="load-buildings">🏢 Load Buildings</button>
+            <button id="load-roads">🛣️ Load Roads</button>
+            <button id="load-streetlights">💡 Load Street Lights</button>
+            <button id="load-traffic-lights">🚦 Load Traffic Lights</button>
+        </div>
+        
+        <div class="control-group">
+            <label>Map Info</label>
+            <div id="zoom-level" style="background: #f0f0f0; padding: 5px; border-radius: 3px; font-size: 12px;">
+                Zoom: <span id="current-zoom">2</span>
+            </div>
         </div>
     </div>
     
