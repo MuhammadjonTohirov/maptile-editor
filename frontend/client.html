@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MapLibre Client - Martin Vector Tiles</title>
+    <script src="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css" rel="stylesheet" />
+    <style>
+        body { 
+            margin: 0; 
+            padding: 0; 
+            font-family: Arial, sans-serif;
+        }
+        
+        #map { 
+            position: absolute; 
+            top: 0; 
+            bottom: 0; 
+            width: 100%; 
+        }
+        
+        .info-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            max-width: 300px;
+            z-index: 1000;
+        }
+        
+        .info-panel h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+            font-size: 16px;
+        }
+        
+        .info-panel p {
+            margin: 5px 0;
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .legend {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+        
+        .legend h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+            font-size: 12px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 12px;
+            margin-right: 8px;
+            border-radius: 2px;
+        }
+        
+        .legend-circle {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+        }
+        
+        .control-btn {
+            display: block;
+            margin: 5px 0;
+            padding: 8px 15px;
+            background: #007cba;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .control-btn:hover {
+            background: #005a9c;
+        }
+        
+        .feature-info {
+            position: absolute;
+            top: 50%;
+            right: 10px;
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            max-width: 250px;
+            z-index: 1000;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div class="info-panel">
+        <h3>🗺️ Pure Vector Map - PostgreSQL Data</h3>
+        <p><strong>Data Source:</strong> PostgreSQL + PostGIS</p>
+        <p><strong>Vector Tiles:</strong> Martin (localhost:3001)</p>
+        <p><strong>Features:</strong> <span id="feature-count">Loading...</span></p>
+        <p><strong>Zoom:</strong> <span id="zoom-level">12</span></p>
+        <p><strong>Mode:</strong> Vector Only (No Raster)</p>
+    </div>
+    
+    <div class="legend">
+        <h4>📊 PostgreSQL Vector Data</h4>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #4a90e2;"></div>
+            <span>Residential Buildings</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #f5a623;"></div>
+            <span>Commercial Buildings</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #bd10e0;"></div>
+            <span>Industrial Buildings</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #50e3c2;"></div>
+            <span>Office Buildings</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-circle" style="background: #ffff00; border: 2px solid #ff8c00;"></div>
+            <span>Street Lights (Points)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-circle" style="background: #ff0000; border: 2px solid #8B0000;"></div>
+            <span>Traffic Lights (Points)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #e892a2;"></div>
+            <span>Roads (Lines)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-circle" style="background: #007cba;"></div>
+            <span>Other Features</span>
+        </div>
+    </div>
+    
+    <div class="controls">
+        <button class="control-btn" onclick="toggleLayer('buildings-3d')">Toggle 3D Buildings</button>
+        <button class="control-btn" onclick="toggleLayer('buildings')">Toggle Buildings</button>
+        <button class="control-btn" onclick="goToLocation()">📍 My Location</button>
+        <button class="control-btn" onclick="refreshTiles()">🔄 Refresh PostgreSQL Data</button>
+    </div>
+    
+    <div class="feature-info" id="feature-info">
+        <h4>Feature Details</h4>
+        <div id="feature-details"></div>
+        <button onclick="closeFeatureInfo()" style="margin-top: 10px; padding: 5px 10px; background: #ccc; border: none; border-radius: 3px; cursor: pointer;">Close</button>
+    </div>
+
+    <script>
+        // Pure vector style using only Martin PostgreSQL data
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    'features': {
+                        type: 'vector',
+                        tiles: ['http://localhost:3001/features/{z}/{x}/{y}'],
+                        minzoom: 0,
+                        maxzoom: 20,
+                        attribution: 'Vector data from PostgreSQL via Martin'
+                    }
+                },
+                layers: [
+                    {
+                        id: 'background',
+                        type: 'background',
+                        paint: {
+                            'background-color': '#f0f8ff'
+                        }
+                    },
+                    {
+                        id: 'buildings',
+                        type: 'fill',
+                        source: 'features',
+                        'source-layer': 'features',
+                        filter: ['==', ['geometry-type'], 'Polygon'],
+                        minzoom: 14,
+                        paint: {
+                            'fill-color': [
+                                'case',
+                                ['has', 'building_type'],
+                                [
+                                    'match',
+                                    ['get', 'building_type'],
+                                    'residential', '#4a90e2',
+                                    'commercial', '#f5a623', 
+                                    'industrial', '#bd10e0',
+                                    'office', '#50e3c2',
+                                    'school', '#9013fe',
+                                    'hospital', '#ff1744',
+                                    'church', '#795548',
+                                    'warehouse', '#607d8b',
+                                    '#7ed321'
+                                ],
+                                '#007cba'
+                            ],
+                            'fill-opacity': 0.6
+                        }
+                    },
+                    {
+                        id: 'buildings-outline',
+                        type: 'line',
+                        source: 'features',
+                        'source-layer': 'features',
+                        filter: ['==', ['geometry-type'], 'Polygon'],
+                        minzoom: 15,
+                        paint: {
+                            'line-color': '#005a9c',
+                            'line-width': 2
+                        }
+                    },
+                    {
+                        id: 'roads-all',
+                        type: 'line',
+                        source: 'features',
+                        'source-layer': 'features',
+                        filter: [
+                            'all',
+                            ['==', ['geometry-type'], 'LineString'],
+                            ['has', 'road_type']
+                        ],
+                        minzoom: 8,
+                        paint: {
+                            'line-color': [
+                                'match',
+                                ['get', 'road_type'],
+                                'motorway', '#e892a2',
+                                'trunk', '#f9b29c',
+                                'primary', '#fcd6a4',
+                                'secondary', '#f7fabf',
+                                'tertiary', '#ffffff',
+                                'residential', '#e8e8e8',
+                                'service', '#cccccc',
+                                '#999999'
+                            ],
+                            'line-width': [
+                                'interpolate',
+                                ['linear'],
+                                ['zoom'],
+                                8, [
+                                    'match',
+                                    ['get', 'road_type'],
+                                    'motorway', 4,
+                                    'trunk', 3,
+                                    'primary', 3,
+                                    'secondary', 2,
+                                    2
+                                ],
+                                15, [
+                                    'match',
+                                    ['get', 'road_type'],
+                                    'motorway', 12,
+                                    'trunk', 10,
+                                    'primary', 8,
+                                    'secondary', 6,
+                                    4
+                                ]
+                            ]
+                        }
+                    },
+                    {
+                        id: 'points-all',
+                        type: 'circle',
+                        source: 'features',
+                        'source-layer': 'features',
+                        filter: ['==', ['geometry-type'], 'Point'],
+                        minzoom: 13,
+                        paint: {
+                            'circle-color': [
+                                'case',
+                                ['==', ['get', 'feature_type'], 'streetlight'], '#ffff00',
+                                ['==', ['get', 'feature_type'], 'traffic_light'], '#ff0000',
+                                '#007cba'
+                            ],
+                            'circle-radius': [
+                                'case',
+                                ['==', ['get', 'feature_type'], 'streetlight'], 8,
+                                ['==', ['get', 'feature_type'], 'traffic_light'], 10,
+                                6
+                            ],
+                            'circle-stroke-color': [
+                                'case',
+                                ['==', ['get', 'feature_type'], 'streetlight'], '#ff8c00',
+                                ['==', ['get', 'feature_type'], 'traffic_light'], '#8B0000',
+                                '#ffffff'
+                            ],
+                            'circle-stroke-width': 2,
+                            'circle-opacity': 0.9
+                        }
+                    },
+                    {
+                        id: 'lines-general',
+                        type: 'line',
+                        source: 'features',
+                        'source-layer': 'features',
+                        filter: [
+                            'all',
+                            ['==', ['geometry-type'], 'LineString'],
+                            ['!', ['has', 'road_type']]
+                        ],
+                        minzoom: 13,
+                        paint: {
+                            'line-color': '#007cba',
+                            'line-width': 3,
+                            'line-opacity': 0.8
+                        }
+                    },
+                    {
+                        id: 'buildings-3d',
+                        type: 'fill-extrusion',
+                        source: 'features',
+                        'source-layer': 'features',
+                        filter: ['==', ['geometry-type'], 'Polygon'],
+                        minzoom: 16,
+                        layout: {
+                            'visibility': 'none'
+                        },
+                        paint: {
+                            'fill-extrusion-color': [
+                                'case',
+                                ['has', 'building_type'],
+                                [
+                                    'match',
+                                    ['get', 'building_type'],
+                                    'residential', '#4a90e2',
+                                    'commercial', '#f5a623',
+                                    'industrial', '#bd10e0',
+                                    'office', '#50e3c2',
+                                    '#7ed321'
+                                ],
+                                '#007cba'
+                            ],
+                            'fill-extrusion-height': 20,
+                            'fill-extrusion-base': 0,
+                            'fill-extrusion-opacity': 0.8
+                        }
+                    }
+                ]
+            },
+            center: [71.7773, 40.3860], // Center on the feature bounds
+            zoom: 12,
+            antialias: true
+        });
+
+        // Add navigation controls
+        map.addControl(new maplibregl.NavigationControl());
+        
+        // Add scale control
+        map.addControl(new maplibregl.ScaleControl({
+            maxWidth: 80,
+            unit: 'metric'
+        }));
+
+        // Update zoom level display
+        map.on('zoom', () => {
+            document.getElementById('zoom-level').textContent = Math.round(map.getZoom());
+        });
+
+        // Load feature count
+        async function loadFeatureCount() {
+            try {
+                const response = await fetch('/api/features');
+                const data = await response.json();
+                document.getElementById('feature-count').textContent = data.features.length;
+            } catch (error) {
+                document.getElementById('feature-count').textContent = 'Error loading';
+            }
+        }
+
+        // Auto-center on user location
+        function goToLocation() {
+            if ('geolocation' in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        map.flyTo({
+                            center: [position.coords.longitude, position.coords.latitude],
+                            zoom: 15,
+                            duration: 2000
+                        });
+                    },
+                    (error) => {
+                        alert('Could not get your location: ' + error.message);
+                    }
+                );
+            } else {
+                alert('Geolocation is not supported by this browser');
+            }
+        }
+
+        // Toggle layer visibility
+        function toggleLayer(layerId) {
+            try {
+                if (map.getLayer(layerId)) {
+                    const visibility = map.getLayoutProperty(layerId, 'visibility');
+                    if (visibility === 'visible' || visibility === undefined) {
+                        map.setLayoutProperty(layerId, 'visibility', 'none');
+                    } else {
+                        map.setLayoutProperty(layerId, 'visibility', 'visible');
+                    }
+                } else {
+                    console.warn(`Layer '${layerId}' does not exist`);
+                }
+            } catch (error) {
+                console.error(`Error toggling layer '${layerId}':`, error);
+            }
+        }
+
+        // Refresh Martin tiles
+        function refreshTiles() {
+            try {
+                // Simple approach: just reload the page to refresh everything
+                const confirmed = confirm('Refresh vector tiles? This will reload the page to fetch latest data from PostgreSQL.');
+                if (confirmed) {
+                    location.reload();
+                }
+            } catch (error) {
+                console.error('Error refreshing tiles:', error);
+                alert('Error refreshing tiles. Please reload the page manually.');
+            }
+        }
+
+        // Feature click handling
+        map.on('click', (e) => {
+            const features = map.queryRenderedFeatures(e.point);
+            
+            if (features.length > 0) {
+                const feature = features[0];
+                
+                // Show feature info panel
+                const infoDiv = document.getElementById('feature-info');
+                const detailsDiv = document.getElementById('feature-details');
+                
+                let details = `<strong>Type:</strong> ${feature.geometry.type}<br>`;
+                
+                if (feature.properties.name) {
+                    details += `<strong>Name:</strong> ${feature.properties.name}<br>`;
+                }
+                
+                if (feature.properties.building_type) {
+                    details += `<strong>Building Type:</strong> ${feature.properties.building_type}<br>`;
+                }
+                
+                if (feature.properties.road_type) {
+                    details += `<strong>Road Type:</strong> ${feature.properties.road_type}<br>`;
+                }
+                
+                if (feature.properties.feature_type) {
+                    details += `<strong>Feature Type:</strong> ${feature.properties.feature_type}<br>`;
+                }
+                
+                details += `<strong>Layer:</strong> ${feature.layer.id}<br>`;
+                details += `<strong>Source:</strong> ${feature.source}`;
+                
+                detailsDiv.innerHTML = details;
+                infoDiv.style.display = 'block';
+            }
+        });
+
+        // Close feature info
+        function closeFeatureInfo() {
+            document.getElementById('feature-info').style.display = 'none';
+        }
+
+        // Change cursor on hover
+        map.on('mouseenter', 'buildings', () => {
+            map.getCanvas().style.cursor = 'pointer';
+        });
+        
+        map.on('mouseleave', 'buildings', () => {
+            map.getCanvas().style.cursor = '';
+        });
+
+        // Initialize
+        map.on('load', () => {
+            loadFeatureCount();
+            console.log('🗺️ Pure Vector Map loaded - PostgreSQL data only!');
+            console.log('📊 Data Source:', 'PostgreSQL + PostGIS');
+            console.log('🎯 Martin vector tiles:', 'http://localhost:3001/features/{z}/{x}/{y}');
+            console.log('✨ No raster tiles - 100% vector data from database');
+        });
+
+        // Error handling and debugging
+        map.on('error', (e) => {
+            console.error('Map error:', e.error);
+            
+            // Handle specific errors
+            let errorMsg = e.error.message;
+            if (errorMsg.includes('cannot be removed while layer')) {
+                errorMsg = 'Refresh in progress - please wait';
+                // Auto-reload after a delay if this error occurs
+                setTimeout(() => {
+                    location.reload();
+                }, 2000);
+            }
+            
+            // Show error in UI
+            document.getElementById('feature-count').textContent = 'Error: ' + errorMsg;
+        });
+
+        // Style loading
+        map.on('styledata', () => {
+            console.log('Style loaded successfully');
+        });
+
+        // Source data events for debugging
+        map.on('sourcedata', (e) => {
+            if (e.sourceId === 'features') {
+                console.log('Features source data:', e);
+            }
+        });
+
+        // Tile loading errors
+        map.on('sourcedataloading', (e) => {
+            if (e.sourceId === 'features') {
+                console.log('Loading features from Martin:', e);
+            }
+        });
+    </script>
+</body>
+</html>

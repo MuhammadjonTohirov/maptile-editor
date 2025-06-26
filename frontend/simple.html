@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ultra Simple Martin Test</title>
+    <script src="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css" rel="stylesheet" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        .info { position: absolute; top: 10px; left: 10px; background: white; padding: 10px; border-radius: 5px; z-index: 1000; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="info">
+        <h4>Ultra Simple Test</h4>
+        <p>Status: <span id="status">Loading...</span></p>
+        <p>Features: <span id="count">0</span></p>
+    </div>
+
+    <script>
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    osm: {
+                        type: 'raster',
+                        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                        tileSize: 256
+                    },
+                    features: {
+                        type: 'vector',
+                        tiles: ['http://localhost:3001/features/{z}/{x}/{y}']
+                    }
+                },
+                layers: [
+                    { id: 'osm', type: 'raster', source: 'osm' },
+                    {
+                        id: 'all-features',
+                        type: 'circle',
+                        source: 'features',
+                        'source-layer': 'features',
+                        paint: { 
+                            'circle-color': '#ff0000', 
+                            'circle-radius': 3 
+                        }
+                    }
+                ]
+            },
+            center: [71.7773, 40.3860],
+            zoom: 12
+        });
+
+        map.on('load', () => {
+            document.getElementById('status').textContent = 'Map loaded!';
+            
+            fetch('/api/features')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('count').textContent = data.features.length;
+                })
+                .catch(e => {
+                    document.getElementById('count').textContent = 'Error';
+                });
+        });
+
+        map.on('error', (e) => {
+            document.getElementById('status').textContent = 'Error: ' + e.error.message;
+            console.error('Map error:', e);
+        });
+    </script>
+</body>
+</html>

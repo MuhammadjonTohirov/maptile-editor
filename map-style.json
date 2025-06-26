@@ -1,0 +1,477 @@
+{
+  "version": 8,
+  "name": "Map Editor Style",
+  "metadata": {
+    "maplibre:type": "map",
+    "description": "Custom map style using Martin vector tiles for the Map Editor project"
+  },
+  "sources": {
+    "osm": {
+      "type": "raster",
+      "tiles": [
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "attribution": "© OpenStreetMap contributors"
+    },
+    "features": {
+      "type": "vector",
+      "tiles": [
+        "http://localhost:3001/features/{z}/{x}/{y}"
+      ],
+      "minzoom": 0,
+      "maxzoom": 20,
+      "attribution": "Map Editor Features"
+    }
+  },
+  "sprite": "https://demotiles.maplibre.org/style/sprite",
+  "glyphs": "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#f8f9fa"
+      }
+    },
+    {
+      "id": "osm",
+      "type": "raster",
+      "source": "osm",
+      "paint": {
+        "raster-opacity": 0.8
+      }
+    },
+    {
+      "id": "buildings",
+      "type": "fill",
+      "source": "features",
+      "source-layer": "features",
+      "filter": ["==", ["geometry-type"], "Polygon"],
+      "minzoom": 14,
+      "paint": {
+        "fill-color": [
+          "case",
+          ["has", "building_type"],
+          [
+            "match",
+            ["get", "building_type"],
+            "residential", "#4a90e2",
+            "commercial", "#f5a623", 
+            "industrial", "#bd10e0",
+            "office", "#50e3c2",
+            "school", "#9013fe",
+            "hospital", "#ff1744",
+            "church", "#795548",
+            "warehouse", "#607d8b",
+            "#7ed321"
+          ],
+          "#007cba"
+        ],
+        "fill-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          14, 0.3,
+          18, 0.6
+        ]
+      }
+    },
+    {
+      "id": "buildings-outline",
+      "type": "line",
+      "source": "features",
+      "source-layer": "features",
+      "filter": ["==", ["geometry-type"], "Polygon"],
+      "minzoom": 15,
+      "paint": {
+        "line-color": [
+          "case",
+          ["has", "building_type"],
+          [
+            "match",
+            ["get", "building_type"],
+            "residential", "#3a7bd5",
+            "commercial", "#e8931d", 
+            "industrial", "#9c27b0",
+            "office", "#26a69a",
+            "school", "#7b1fa2",
+            "hospital", "#d32f2f",
+            "church", "#5d4037",
+            "warehouse", "#455a64",
+            "#6aa84f"
+          ],
+          "#005a9c"
+        ],
+        "line-width": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          15, 1,
+          18, 2
+        ]
+      }
+    },
+    {
+      "id": "buildings-3d",
+      "type": "fill-extrusion",
+      "source": "features",
+      "source-layer": "features",
+      "filter": ["==", ["geometry-type"], "Polygon"],
+      "minzoom": 16,
+      "paint": {
+        "fill-extrusion-color": [
+          "case",
+          ["has", "building_type"],
+          [
+            "match",
+            ["get", "building_type"],
+            "residential", "#4a90e2",
+            "commercial", "#f5a623",
+            "industrial", "#bd10e0",
+            "office", "#50e3c2",
+            "school", "#9013fe",
+            "hospital", "#ff1744",
+            "church", "#795548",
+            "warehouse", "#607d8b",
+            "#7ed321"
+          ],
+          "#007cba"
+        ],
+        "fill-extrusion-height": [
+          "case",
+          ["has", "height"],
+          ["get", "height"],
+          [
+            "case",
+            ["has", "building_type"],
+            [
+              "match",
+              ["get", "building_type"],
+              "residential", 15,
+              "commercial", 25,
+              "industrial", 12,
+              "office", 40,
+              "school", 18,
+              "hospital", 30,
+              "church", 25,
+              "warehouse", 10,
+              20
+            ],
+            10
+          ]
+        ],
+        "fill-extrusion-base": 0,
+        "fill-extrusion-opacity": 0.8
+      }
+    },
+    {
+      "id": "roads-major",
+      "type": "line",
+      "source": "features",
+      "source-layer": "features",
+      "filter": [
+        "all",
+        ["==", ["geometry-type"], "LineString"],
+        ["has", "road_type"],
+        [
+          "in",
+          ["get", "road_type"],
+          ["literal", ["motorway", "trunk", "primary", "secondary"]]
+        ]
+      ],
+      "minzoom": 8,
+      "paint": {
+        "line-color": [
+          "match",
+          ["get", "road_type"],
+          "motorway", "#e892a2",
+          "trunk", "#f9b29c",
+          "primary", "#fcd6a4",
+          "secondary", "#f7fabf",
+          "#cccccc"
+        ],
+        "line-width": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          8, [
+            "match",
+            ["get", "road_type"],
+            "motorway", 3,
+            "trunk", 2.5,
+            "primary", 2,
+            "secondary", 1.5,
+            1
+          ],
+          15, [
+            "match",
+            ["get", "road_type"],
+            "motorway", 12,
+            "trunk", 10,
+            "primary", 8,
+            "secondary", 6,
+            4
+          ]
+        ]
+      }
+    },
+    {
+      "id": "roads-minor",
+      "type": "line",
+      "source": "features",
+      "source-layer": "features",
+      "filter": [
+        "all",
+        ["==", ["geometry-type"], "LineString"],
+        ["has", "road_type"],
+        [
+          "in",
+          ["get", "road_type"],
+          ["literal", ["tertiary", "residential", "service"]]
+        ]
+      ],
+      "minzoom": 12,
+      "paint": {
+        "line-color": [
+          "match",
+          ["get", "road_type"],
+          "tertiary", "#ffffff",
+          "residential", "#e8e8e8",
+          "service", "#cccccc",
+          "#999999"
+        ],
+        "line-width": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          12, [
+            "match",
+            ["get", "road_type"],
+            "tertiary", 2,
+            "residential", 1.5,
+            "service", 1,
+            1
+          ],
+          18, [
+            "match",
+            ["get", "road_type"],
+            "tertiary", 6,
+            "residential", 4,
+            "service", 3,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "id": "roads-paths",
+      "type": "line",
+      "source": "features",
+      "source-layer": "features",
+      "filter": [
+        "all",
+        ["==", ["geometry-type"], "LineString"],
+        ["has", "road_type"],
+        [
+          "in",
+          ["get", "road_type"],
+          ["literal", ["footway", "path", "cycleway", "steps"]]
+        ]
+      ],
+      "minzoom": 14,
+      "paint": {
+        "line-color": "#fa8072",
+        "line-width": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          14, 1,
+          18, 3
+        ],
+        "line-dasharray": [2, 2]
+      }
+    },
+    {
+      "id": "streetlights-glow",
+      "type": "circle",
+      "source": "features",
+      "source-layer": "features",
+      "filter": [
+        "all",
+        ["==", ["geometry-type"], "Point"],
+        ["==", ["get", "feature_type"], "streetlight"]
+      ],
+      "minzoom": 16,
+      "paint": {
+        "circle-color": "#ffff00",
+        "circle-radius": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          16, 8,
+          20, 15
+        ],
+        "circle-opacity": 0.3,
+        "circle-blur": 1
+      }
+    },
+    {
+      "id": "streetlights",
+      "type": "circle",
+      "source": "features",
+      "source-layer": "features",
+      "filter": [
+        "all",
+        ["==", ["geometry-type"], "Point"],
+        ["==", ["get", "feature_type"], "streetlight"]
+      ],
+      "minzoom": 16,
+      "paint": {
+        "circle-color": "#ffff00",
+        "circle-radius": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          16, 6,
+          20, 10
+        ],
+        "circle-stroke-color": "#ff8c00",
+        "circle-stroke-width": 2,
+        "circle-opacity": 0.9
+      }
+    },
+    {
+      "id": "traffic-lights-glow",
+      "type": "circle",
+      "source": "features",
+      "source-layer": "features",
+      "filter": [
+        "all",
+        ["==", ["geometry-type"], "Point"],
+        ["==", ["get", "feature_type"], "traffic_light"]
+      ],
+      "minzoom": 14,
+      "paint": {
+        "circle-color": "#ff0000",
+        "circle-radius": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          14, 10,
+          20, 18
+        ],
+        "circle-opacity": 0.3,
+        "circle-blur": 1
+      }
+    },
+    {
+      "id": "traffic-lights",
+      "type": "circle",
+      "source": "features",
+      "source-layer": "features",
+      "filter": [
+        "all",
+        ["==", ["geometry-type"], "Point"],
+        ["==", ["get", "feature_type"], "traffic_light"]
+      ],
+      "minzoom": 14,
+      "paint": {
+        "circle-color": "#ff0000",
+        "circle-radius": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          14, 8,
+          20, 14
+        ],
+        "circle-stroke-color": "#8B0000",
+        "circle-stroke-width": 3,
+        "circle-opacity": 0.9
+      }
+    },
+    {
+      "id": "points-general",
+      "type": "circle",
+      "source": "features",
+      "source-layer": "features",
+      "filter": [
+        "all",
+        ["==", ["geometry-type"], "Point"],
+        ["!has", "feature_type"]
+      ],
+      "minzoom": 13,
+      "paint": {
+        "circle-color": "#007cba",
+        "circle-radius": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          13, 4,
+          18, 8
+        ],
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 2,
+        "circle-opacity": 0.8
+      }
+    },
+    {
+      "id": "lines-general",
+      "type": "line",
+      "source": "features",
+      "source-layer": "features",
+      "filter": [
+        "all",
+        ["==", ["geometry-type"], "LineString"],
+        ["!has", "road_type"]
+      ],
+      "minzoom": 13,
+      "paint": {
+        "line-color": "#007cba",
+        "line-width": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          13, 2,
+          18, 4
+        ],
+        "line-opacity": 0.8
+      }
+    },
+    {
+      "id": "feature-labels",
+      "type": "symbol",
+      "source": "features",
+      "source-layer": "features",
+      "filter": ["has", "name"],
+      "minzoom": 16,
+      "layout": {
+        "text-field": ["get", "name"],
+        "text-font": ["Open Sans Regular"],
+        "text-size": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          16, 10,
+          20, 14
+        ],
+        "text-anchor": "center",
+        "text-offset": [0, 1],
+        "text-optional": true,
+        "symbol-avoid-edges": true
+      },
+      "paint": {
+        "text-color": "#333333",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.5,
+        "text-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          16, 0.7,
+          18, 1
+        ]
+      }
+    }
+  ]
+}

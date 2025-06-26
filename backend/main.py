@@ -226,6 +226,26 @@ async def update_feature(
         await db.rollback()
         raise HTTPException(status_code=400, detail=f"Error updating feature: {str(e)}")
 
+@app.delete("/features/clear-all")
+async def clear_all_features(db: AsyncSession = Depends(get_db)):
+    """Delete all features from the database"""
+    try:
+        # Count features before deletion
+        count_result = await db.execute(select(Feature))
+        feature_count = len(count_result.fetchall())
+        
+        # Delete all features
+        await db.execute(delete(Feature))
+        await db.commit()
+        
+        return {
+            "message": f"Successfully cleared {feature_count} features from the database",
+            "features_deleted": feature_count
+        }
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error clearing features: {str(e)}")
+
 @app.delete("/features/{feature_id}")
 async def delete_feature(feature_id: int, db: AsyncSession = Depends(get_db)):
     try:
@@ -234,7 +254,6 @@ async def delete_feature(feature_id: int, db: AsyncSession = Depends(get_db)):
         
         if not db_feature:
             raise HTTPException(status_code=404, detail="Feature not found")
-        
         await db.execute(delete(Feature).where(Feature.id == feature_id))
         await db.commit()
         
@@ -693,6 +712,28 @@ async def load_osm_traffic_lights(
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=400, detail=f"Error loading OSM traffic lights: {str(e)}")
+
+@app.get("/map-style")
+async def get_map_style():
+    """Serve the custom MapLibre style JSON"""
+    import os
+    import json
+    
+    style_path = "/app/map-style.json"
+    
+    try:
+        with open(style_path, 'r') as f:
+            style = json.load(f)
+        
+        # Update the Martin tile URL to use the correct host
+        # This ensures the style works from any client
+        style["sources"]["features"]["tiles"] = ["http://localhost:3001/features/{z}/{x}/{y}"]
+        
+        return style
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Map style not found")
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Invalid map style format")
 
 @app.get("/health")
 async def health_check():

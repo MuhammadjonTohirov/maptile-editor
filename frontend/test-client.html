@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Martin Test</title>
+    <script src="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css" rel="stylesheet" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        .info { position: absolute; top: 10px; left: 10px; background: white; padding: 10px; border-radius: 5px; z-index: 1000; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="info">
+        <h4>Simple Martin Test</h4>
+        <p>Status: <span id="status">Loading...</span></p>
+        <p>Features: <span id="count">0</span></p>
+    </div>
+
+    <script>
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    osm: {
+                        type: 'raster',
+                        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                        tileSize: 256
+                    },
+                    features: {
+                        type: 'vector',
+                        tiles: ['http://localhost:3001/features/{z}/{x}/{y}']
+                    }
+                },
+                layers: [
+                    { id: 'osm', type: 'raster', source: 'osm' },
+                    {
+                        id: 'buildings',
+                        type: 'fill',
+                        source: 'features',
+                        'source-layer': 'features',
+                        filter: ['==', ['geometry-type'], 'Polygon'],
+                        paint: { 'fill-color': '#4a90e2', 'fill-opacity': 0.6 }
+                    },
+                    {
+                        id: 'roads',
+                        type: 'line',
+                        source: 'features',
+                        'source-layer': 'features',
+                        filter: ['==', ['geometry-type'], 'LineString'],
+                        paint: { 'line-color': '#e892a2', 'line-width': 3 }
+                    },
+                    {
+                        id: 'points',
+                        type: 'circle',
+                        source: 'features',
+                        'source-layer': 'features',
+                        filter: ['==', ['geometry-type'], 'Point'],
+                        paint: { 'circle-color': '#ff0000', 'circle-radius': 5 }
+                    }
+                ]
+            },
+            center: [71.7773, 40.3860],
+            zoom: 12
+        });
+
+        map.on('load', () => {
+            document.getElementById('status').textContent = 'Map loaded!';
+            
+            // Load feature count
+            fetch('/api/features')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('count').textContent = data.features.length;
+                })
+                .catch(e => {
+                    document.getElementById('count').textContent = 'Error loading';
+                });
+        });
+
+        map.on('error', (e) => {
+            document.getElementById('status').textContent = 'Error: ' + e.error.message;
+            console.error('Map error:', e);
+        });
+    </script>
+</body>
+</html>

@@ -94,6 +94,15 @@
             height: 60px;
             resize: vertical;
         }
+        
+        #delete-feature {
+            background: #dc3545 !important;
+            margin-left: 5px;
+        }
+        
+        #delete-feature:hover {
+            background: #c82333 !important;
+        }
     </style>
 </head>
 <body>
@@ -107,7 +116,6 @@
             <button id="draw-line">Draw Line</button>
             <button id="draw-polygon">Draw Polygon</button>
             <button id="select">Select</button>
-            <button id="delete">Delete</button>
         </div>
         
         <div class="control-group">
@@ -168,6 +176,7 @@
                 <option value="🕌">🕌 Mosque</option>
             </select>
             <button id="save-feature">Save Feature</button>
+            <button id="delete-feature">🗑️ Delete Feature</button>
             <button id="cancel-edit">Cancel</button>
         </div>
     </div>

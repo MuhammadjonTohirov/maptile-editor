@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pure Vector - PostgreSQL Only</title>
+    <script src="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css" rel="stylesheet" />
+    <style>
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        .info { 
+            position: absolute; 
+            top: 10px; 
+            left: 10px; 
+            background: rgba(255,255,255,0.95); 
+            padding: 15px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000; 
+            max-width: 250px;
+        }
+        .info h4 { margin: 0 0 10px 0; color: #333; }
+        .info p { margin: 5px 0; font-size: 14px; color: #666; }
+        .vector-badge {
+            background: #007cba;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="info">
+        <h4>🗺️ Pure Vector Map</h4>
+        <p><span class="vector-badge">100% VECTOR</span></p>
+        <p><strong>Data:</strong> PostgreSQL + PostGIS</p>
+        <p><strong>Tiles:</strong> Martin Vector Server</p>
+        <p><strong>Status:</strong> <span id="status">Loading...</span></p>
+        <p><strong>Features:</strong> <span id="count">0</span></p>
+        <p><strong>Zoom:</strong> <span id="zoom">12</span></p>
+        <hr style="margin: 10px 0;">
+        <p style="font-size: 12px; color: #999;">No raster tiles used. All data comes directly from PostgreSQL database via Martin vector tile server.</p>
+    </div>
+
+    <script>
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    features: {
+                        type: 'vector',
+                        tiles: ['http://localhost:3001/features/{z}/{x}/{y}'],
+                        attribution: 'PostgreSQL Data via Martin'
+                    }
+                },
+                layers: [
+                    { 
+                        id: 'background', 
+                        type: 'background', 
+                        paint: { 'background-color': '#f0f8ff' } 
+                    },
+                    {
+                        id: 'buildings',
+                        type: 'fill',
+                        source: 'features',
+                        'source-layer': 'features',
+                        filter: ['==', ['geometry-type'], 'Polygon'],
+                        paint: { 
+                            'fill-color': '#4a90e2', 
+                            'fill-opacity': 0.6,
+                            'fill-outline-color': '#005a9c'
+                        }
+                    },
+                    {
+                        id: 'roads',
+                        type: 'line',
+                        source: 'features',
+                        'source-layer': 'features',
+                        filter: [
+                            'all',
+                            ['==', ['geometry-type'], 'LineString'],
+                            ['has', 'road_type']
+                        ],
+                        paint: { 
+                            'line-color': '#e892a2', 
+                            'line-width': 3 
+                        }
+                    },
+                    {
+                        id: 'points',
+                        type: 'circle',
+                        source: 'features',
+                        'source-layer': 'features',
+                        filter: ['==', ['geometry-type'], 'Point'],
+                        paint: { 
+                            'circle-color': '#ff0000', 
+                            'circle-radius': 5,
+                            'circle-stroke-color': '#ffffff',
+                            'circle-stroke-width': 1
+                        }
+                    },
+                    {
+                        id: 'other-lines',
+                        type: 'line',
+                        source: 'features',
+                        'source-layer': 'features',
+                        filter: [
+                            'all',
+                            ['==', ['geometry-type'], 'LineString'],
+                            ['!', ['has', 'road_type']]
+                        ],
+                        paint: { 
+                            'line-color': '#007cba', 
+                            'line-width': 2 
+                        }
+                    }
+                ]
+            },
+            center: [71.7773, 40.3860],
+            zoom: 12
+        });
+
+        // Update zoom display
+        map.on('zoom', () => {
+            document.getElementById('zoom').textContent = Math.round(map.getZoom());
+        });
+
+        map.on('load', () => {
+            document.getElementById('status').textContent = 'Vector map loaded!';
+            
+            // Load feature count from PostgreSQL
+            fetch('/api/features')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('count').textContent = data.features.length + ' from DB';
+                })
+                .catch(e => {
+                    document.getElementById('count').textContent = 'Error loading';
+                });
+
+            console.log('🎯 Pure Vector Map loaded successfully!');
+            console.log('📊 PostgreSQL features being served as vector tiles');
+            console.log('✨ Zero raster tiles - 100% vector rendering');
+        });
+
+        map.on('error', (e) => {
+            document.getElementById('status').textContent = 'Error: ' + e.error.message;
+            console.error('Map error:', e);
+        });
+
+        // Add navigation controls
+        map.addControl(new maplibregl.NavigationControl());
+    </script>
+</body>
+</html>

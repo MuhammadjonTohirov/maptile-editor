@@ -6,6 +6,8 @@ class MapEditor {
         this.draw = null;
         this.map = null;
         this.features = new Map(); // Store features by ID
+        this.pendingUpdate = null; // Store pending updates to avoid immediate saves
+        this.hiddenFeatureId = null; // Track hidden feature during editing
         
         this.initMap();
         this.initControls();
@@ -14,6 +16,17 @@ class MapEditor {
     }
 
     initMap() {
+        // Option 1: Use custom Martin-powered style
+        // this.map = new maplibregl.Map({
+        //     container: 'map',
+        //     style: 'http://localhost:3000/api/map-style',
+        //     center: [0, 0],
+        //     zoom: 2,
+        //     pitch: 0,
+        //     bearing: 0
+        // });
+
+        // Option 2: Use inline style (current implementation)
         this.map = new maplibregl.Map({
             container: 'map',
             style: {
@@ -26,6 +39,12 @@ class MapEditor {
                         ],
                         tileSize: 256,
                         attribution: '© OpenStreetMap contributors'
+                    },
+                    'features': {
+                        type: 'vector',
+                        tiles: ['http://localhost:3001/features/{z}/{x}/{y}'],
+                        minzoom: 0,
+                        maxzoom: 20
                     }
                 },
                 layers: [
@@ -175,9 +194,7 @@ class MapEditor {
             this.setDrawingMode('simple_select');
         });
 
-        document.getElementById('delete').addEventListener('click', () => {
-            this.deleteSelectedFeature();
-        });
+        // Delete button moved to feature properties panel
 
         // Data operations
         document.getElementById('clear-all').addEventListener('click', () => {
@@ -199,6 +216,10 @@ class MapEditor {
 
         document.getElementById('cancel-edit').addEventListener('click', () => {
             this.hideFeatureInfo();
+        });
+
+        document.getElementById('delete-feature').addEventListener('click', () => {
+            this.deleteSelectedFeature();
         });
 
         // Location
@@ -358,7 +379,7 @@ class MapEditor {
         this.map.addControl(this.draw);
         
         // Enable drawing tools
-        document.querySelectorAll('#draw-point, #draw-line, #draw-polygon, #delete').forEach(btn => {
+        document.querySelectorAll('#draw-point, #draw-line, #draw-polygon').forEach(btn => {
             btn.disabled = false;
             btn.style.opacity = '1';
         });
@@ -370,22 +391,44 @@ class MapEditor {
 
         this.map.on('draw.update', (e) => {
             this.handleFeatureUpdate(e);
+            // Update midpoint handles when vertices are moved
+            this.updateMidpointHandles(e.features[0]);
         });
 
         this.map.on('draw.delete', (e) => {
             this.handleFeatureDelete(e);
         });
+
+        // Add listener for mode changes to clean up midpoints when not in direct select
+        this.map.on('draw.modechange', (e) => {
+            // Save any pending updates when leaving direct select mode
+            if (e.mode !== 'direct_select' && this.pendingUpdate) {
+                this.savePendingUpdate();
+            }
+            
+            if (e.mode !== 'direct_select') {
+                this.cleanupMidpointHandles();
+            }
+        });
     }
 
     disableEditing() {
+        // Save any pending updates before disabling
+        if (this.pendingUpdate) {
+            this.savePendingUpdate();
+        }
+        
         // Clear any features being edited
         if (this.draw) {
             this.draw.deleteAll();
             this.map.removeControl(this.draw);
         }
         
+        // Clean up midpoint handles
+        this.cleanupMidpointHandles();
+        
         // Disable drawing tools
-        document.querySelectorAll('#draw-point, #draw-line, #draw-polygon, #delete').forEach(btn => {
+        document.querySelectorAll('#draw-point, #draw-line, #draw-polygon').forEach(btn => {
             btn.disabled = true;
             btn.style.opacity = '0.5';
         });
@@ -401,6 +444,38 @@ class MapEditor {
         // Clear any selection
         this.clearHighlight();
         this.hideFeatureInfo();
+    }
+
+    cleanupMidpointHandles() {
+        // Remove midpoint layer and source
+        if (this.map.getSource('midpoints')) {
+            this.map.removeLayer('midpoints');
+            this.map.removeSource('midpoints');
+        }
+        
+        // Remove custom vertex styles
+        const existingStyle = document.getElementById('vertex-custom-styles');
+        if (existingStyle) {
+            existingStyle.remove();
+        }
+        
+        // Restore original feature visibility
+        this.showOriginalFeature();
+    }
+
+    updateMidpointHandles(feature) {
+        // Only update if we're in direct select mode and have line/polygon
+        if (feature && (feature.geometry.type === 'LineString' || feature.geometry.type === 'Polygon')) {
+            this.addMidpointHandles(feature);
+        }
+    }
+
+    async savePendingUpdate() {
+        if (this.pendingUpdate) {
+            console.log('Saving pending update for feature:', this.pendingUpdate.featureId);
+            await this.updateExistingFeature(this.pendingUpdate.featureId, this.pendingUpdate.updatedFeature);
+            this.pendingUpdate = null;
+        }
     }
 
     addKeyboardShortcuts() {
@@ -483,6 +558,9 @@ class MapEditor {
             // Clear any existing features in draw
             this.draw.deleteAll();
             
+            // Hide the original feature to prevent duplication
+            this.hideOriginalFeature(feature.properties.id);
+            
             // Create a new feature for the draw layer
             const editableFeature = {
                 type: 'Feature',
@@ -496,20 +574,241 @@ class MapEditor {
             // Add to draw layer for editing
             this.draw.add(editableFeature);
             
-            // Switch to select mode so user can immediately edit
-            this.draw.changeMode('simple_select');
+            // Switch to direct select mode for better vertex editing
+            this.draw.changeMode('direct_select', {
+                featureId: this.draw.getAll().features[0].id
+            });
+            
+            // Add custom vertex editing enhancements
+            this.enhanceVertexEditing(editableFeature);
             
             // Show visual feedback that feature is now editable
             this.showEditingFeedback();
-            
-            // Update delete button state
-            this.updateDeleteButtonState();
             
             console.log('Feature made editable:', editableFeature);
             
         } catch (error) {
             console.error('Error making feature editable:', error);
         }
+    }
+
+    hideOriginalFeature(featureId) {
+        // Create a filter to hide the specific feature being edited
+        const allLayers = ['buildings', 'buildings-outline', 'roads', 'streetlights', 'streetlights-bg', 
+                          'traffic-lights', 'traffic-lights-bg', 'points', 'lines', 'debug-all-lines'];
+        
+        allLayers.forEach(layerId => {
+            if (this.map.getLayer(layerId)) {
+                const currentFilter = this.map.getFilter(layerId) || ['==', ['geometry-type'], 'Point'];
+                // Add condition to exclude the feature being edited
+                const newFilter = ['all', currentFilter, ['!=', ['get', 'id'], featureId]];
+                this.map.setFilter(layerId, newFilter);
+            }
+        });
+        
+        // Store the hidden feature ID
+        this.hiddenFeatureId = featureId;
+    }
+
+    showOriginalFeature() {
+        // Restore original filters to show all features
+        if (this.hiddenFeatureId) {
+            this.restoreLayerFilters();
+            this.hiddenFeatureId = null;
+        }
+    }
+
+    restoreLayerFilters() {
+        // Restore original layer filters
+        const layerFilters = {
+            'buildings': ['==', ['geometry-type'], 'Polygon'],
+            'buildings-outline': ['==', ['geometry-type'], 'Polygon'],
+            'roads': ['all', ['==', ['geometry-type'], 'LineString'], ['has', 'road_type']],
+            'streetlights': ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'feature_type'], 'streetlight']],
+            'streetlights-bg': ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'feature_type'], 'streetlight']],
+            'traffic-lights': ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'feature_type'], 'traffic_light']],
+            'traffic-lights-bg': ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'feature_type'], 'traffic_light']],
+            'points': ['all', ['==', ['geometry-type'], 'Point'], ['!has', 'feature_type']],
+            'lines': ['all', ['==', ['geometry-type'], 'LineString'], ['!has', 'road_type']],
+            'debug-all-lines': ['==', ['geometry-type'], 'LineString']
+        };
+
+        Object.entries(layerFilters).forEach(([layerId, filter]) => {
+            if (this.map.getLayer(layerId)) {
+                this.map.setFilter(layerId, filter);
+            }
+        });
+    }
+
+    enhanceVertexEditing(feature) {
+        // Add midpoint handles for lines and polygons
+        if (feature.geometry.type === 'LineString' || feature.geometry.type === 'Polygon') {
+            this.addMidpointHandles(feature);
+        }
+        
+        // Customize vertex appearance
+        this.customizeVertexAppearance();
+    }
+
+    addMidpointHandles(feature) {
+        const coordinates = feature.geometry.type === 'Polygon' 
+            ? feature.geometry.coordinates[0] 
+            : feature.geometry.coordinates;
+
+        // Remove existing midpoint source if it exists
+        if (this.map.getSource('midpoints')) {
+            this.map.removeLayer('midpoints');
+            this.map.removeSource('midpoints');
+        }
+
+        // Calculate midpoints between vertices
+        const midpoints = [];
+        for (let i = 0; i < coordinates.length - 1; i++) {
+            const current = coordinates[i];
+            const next = coordinates[i + 1];
+            
+            const midpoint = [
+                (current[0] + next[0]) / 2,
+                (current[1] + next[1]) / 2
+            ];
+            
+            midpoints.push({
+                type: 'Feature',
+                geometry: {
+                    type: 'Point',
+                    coordinates: midpoint
+                },
+                properties: {
+                    type: 'midpoint',
+                    insertIndex: i + 1
+                }
+            });
+        }
+
+        // Add midpoints source and layer
+        this.map.addSource('midpoints', {
+            type: 'geojson',
+            data: {
+                type: 'FeatureCollection',
+                features: midpoints
+            }
+        });
+
+        this.map.addLayer({
+            id: 'midpoints',
+            type: 'circle',
+            source: 'midpoints',
+            paint: {
+                'circle-color': '#ffffff',
+                'circle-stroke-color': '#007cba',
+                'circle-stroke-width': 3,
+                'circle-radius': 6,
+                'circle-opacity': 0.8
+            }
+        });
+
+        // Add click handler for midpoints
+        this.map.on('click', 'midpoints', (e) => {
+            this.handleMidpointClick(e);
+        });
+
+        // Change cursor on hover
+        this.map.on('mouseenter', 'midpoints', () => {
+            this.map.getCanvas().style.cursor = 'pointer';
+        });
+
+        this.map.on('mouseleave', 'midpoints', () => {
+            this.map.getCanvas().style.cursor = '';
+        });
+    }
+
+    handleMidpointClick(e) {
+        e.preventDefault();
+        const midpointFeature = e.features[0];
+        const insertIndex = midpointFeature.properties.insertIndex;
+        const newCoordinate = midpointFeature.geometry.coordinates;
+
+        // Get the current feature being edited
+        const drawFeatures = this.draw.getAll().features;
+        if (drawFeatures.length > 0) {
+            const feature = drawFeatures[0];
+            const coordinates = feature.geometry.type === 'Polygon' 
+                ? feature.geometry.coordinates[0] 
+                : feature.geometry.coordinates;
+
+            // Insert new coordinate at the specified index
+            coordinates.splice(insertIndex, 0, newCoordinate);
+
+            // Update the feature geometry
+            if (feature.geometry.type === 'Polygon') {
+                feature.geometry.coordinates[0] = coordinates;
+            } else {
+                feature.geometry.coordinates = coordinates;
+            }
+
+            // Update the draw feature
+            this.draw.delete(feature.id);
+            this.draw.add(feature);
+
+            // Switch back to direct select mode
+            this.draw.changeMode('direct_select', {
+                featureId: this.draw.getAll().features[0].id
+            });
+
+            // Refresh midpoint handles
+            this.addMidpointHandles(feature);
+
+            console.log('Vertex added at midpoint');
+        }
+    }
+
+    customizeVertexAppearance() {
+        // Add custom styles for better vertex visibility
+        const style = document.createElement('style');
+        style.textContent = `
+            .mapboxgl-ctrl-group .mapbox-gl-draw_polygon,
+            .mapboxgl-ctrl-group .mapbox-gl-draw_line,
+            .mapboxgl-ctrl-group .mapbox-gl-draw_point {
+                background-color: #007cba !important;
+            }
+            
+            .mapbox-gl-draw_vertex.mapbox-gl-draw_vertex-active {
+                background-color: #ff6b35 !important;
+                border: 3px solid #ffffff !important;
+                border-radius: 50% !important;
+                width: 12px !important;
+                height: 12px !important;
+                cursor: grab !important;
+            }
+            
+            .mapbox-gl-draw_vertex.mapbox-gl-draw_vertex-active:hover {
+                background-color: #ff4500 !important;
+                cursor: grabbing !important;
+            }
+            
+            .mapbox-gl-draw_vertex {
+                background-color: #007cba !important;
+                border: 2px solid #ffffff !important;
+                border-radius: 50% !important;
+                width: 10px !important;
+                height: 10px !important;
+                cursor: grab !important;
+            }
+            
+            .mapbox-gl-draw_vertex:hover {
+                background-color: #0056b3 !important;
+                cursor: grabbing !important;
+            }
+        `;
+        
+        // Remove existing custom styles
+        const existingStyle = document.getElementById('vertex-custom-styles');
+        if (existingStyle) {
+            existingStyle.remove();
+        }
+        
+        style.id = 'vertex-custom-styles';
+        document.head.appendChild(style);
     }
 
     highlightFeature(feature) {
@@ -575,6 +874,11 @@ class MapEditor {
         const hasFeatureLayer = features.some(f => f.source === 'features');
         
         if (!hasFeatureLayer) {
+            // Save any pending updates before clearing selection
+            if (this.pendingUpdate) {
+                this.savePendingUpdate();
+            }
+            
             this.selectedFeature = null;
             this.hideFeatureInfo();
             this.clearHighlight();
@@ -682,8 +986,13 @@ class MapEditor {
         const originalId = feature.properties.originalId;
         
         if (originalId) {
-            // Update existing feature
-            this.updateExistingFeature(originalId, feature);
+            // For existing features, just store the changes temporarily
+            // We'll save when user finishes editing (on mode change or click away)
+            this.pendingUpdate = {
+                featureId: originalId,
+                updatedFeature: feature
+            };
+            console.log('Pending update stored for feature:', originalId);
         } else {
             // New feature being modified
             this.autoSaveModifiedFeature(feature);
@@ -718,10 +1027,23 @@ class MapEditor {
 
             if (response.ok) {
                 console.log('Feature updated successfully');
+                
+                // Clear the draw layer first to prevent duplicates
+                this.draw.deleteAll();
+                
+                // Clean up editing UI
+                this.cleanupMidpointHandles();
+                this.clearHighlight();
+                
+                // Restore original feature visibility
+                this.showOriginalFeature();
+                
                 // Reload features to show the updated geometry
                 await this.loadFeatures();
-                // Clear the draw layer since the feature is now updated
-                this.draw.deleteAll();
+                
+                // Clear selected feature since editing is done
+                this.selectedFeature = null;
+                
             } else {
                 const errorText = await response.text();
                 console.error('Failed to update feature:', response.status, errorText);
@@ -742,34 +1064,28 @@ class MapEditor {
 
     async loadFeatures() {
         try {
+            // Martin vector tiles are loaded automatically via the vector source
+            // We still load feature data for the in-memory storage and properties editing
             const response = await fetch('/api/features');
             
             if (response.ok) {
                 const geoJsonData = await response.json();
                 
-                // Add features source if it doesn't exist
-                if (!this.map.getSource('features')) {
-                    this.map.addSource('features', {
-                        type: 'geojson',
-                        data: geoJsonData
-                    });
-                    
+                // The vector source is already defined in the map style, so we just need to add layers
+                if (!this.map.getLayer('buildings')) {
                     this.addFeatureLayers();
                     
                     // Add click handlers for feature interaction
                     this.addLayerClickHandlers();
-                } else {
-                    // Update existing source
-                    this.map.getSource('features').setData(geoJsonData);
                 }
                 
-                // Store features in memory
+                // Store features in memory for properties editing
                 this.features.clear();
                 geoJsonData.features.forEach(feature => {
                     this.features.set(feature.id, feature);
                 });
                 
-                console.log(`Loaded ${geoJsonData.features.length} features`);
+                console.log(`Loaded ${geoJsonData.features.length} features via Martin vector tiles`);
             } else {
                 console.error('Failed to load features');
             }
@@ -779,11 +1095,12 @@ class MapEditor {
     }
 
     addFeatureLayers() {
-        // Add building polygons
+        // Add building polygons - now using vector tiles from Martin
         this.map.addLayer({
             id: 'buildings',
             type: 'fill',
             source: 'features',
+            'source-layer': 'features', // Martin creates this layer automatically
             filter: ['==', ['geometry-type'], 'Polygon'],
             paint: {
                 'fill-color': [
@@ -809,6 +1126,7 @@ class MapEditor {
             id: 'buildings-outline',
             type: 'line',
             source: 'features',
+            'source-layer': 'features',
             filter: ['==', ['geometry-type'], 'Polygon'],
             paint: {
                 'line-color': '#007cba',
@@ -821,6 +1139,7 @@ class MapEditor {
             id: 'roads',
             type: 'line',
             source: 'features',
+            'source-layer': 'features',
             filter: ['all', 
                 ['==', ['geometry-type'], 'LineString'],
                 ['has', 'road_type']
@@ -876,6 +1195,7 @@ class MapEditor {
             id: 'streetlights-bg',
             type: 'circle',
             source: 'features',
+            'source-layer': 'features',
             filter: ['all',
                 ['==', ['geometry-type'], 'Point'],
                 ['==', ['get', 'feature_type'], 'streetlight']
@@ -894,6 +1214,7 @@ class MapEditor {
             id: 'streetlights',
             type: 'symbol',
             source: 'features',
+            'source-layer': 'features',
             filter: ['all',
                 ['==', ['geometry-type'], 'Point'],
                 ['==', ['get', 'feature_type'], 'streetlight']
@@ -914,6 +1235,7 @@ class MapEditor {
             id: 'traffic-lights-bg',
             type: 'circle',
             source: 'features',
+            'source-layer': 'features',
             filter: ['all',
                 ['==', ['geometry-type'], 'Point'],
                 ['==', ['get', 'feature_type'], 'traffic_light']
@@ -932,6 +1254,7 @@ class MapEditor {
             id: 'traffic-lights',
             type: 'symbol',
             source: 'features',
+            'source-layer': 'features',
             filter: ['all',
                 ['==', ['geometry-type'], 'Point'],
                 ['==', ['get', 'feature_type'], 'traffic_light']
@@ -952,6 +1275,7 @@ class MapEditor {
             id: 'points',
             type: 'circle',
             source: 'features',
+            'source-layer': 'features',
             filter: ['all',
                 ['==', ['geometry-type'], 'Point'],
                 ['!has', 'feature_type']
@@ -969,6 +1293,7 @@ class MapEditor {
             id: 'debug-all-lines',
             type: 'line',
             source: 'features',
+            'source-layer': 'features',
             filter: ['==', ['geometry-type'], 'LineString'],
             paint: {
                 'line-color': '#00ff00', // bright green for debugging
@@ -982,6 +1307,7 @@ class MapEditor {
             id: 'lines',
             type: 'line',
             source: 'features',
+            'source-layer': 'features',
             filter: ['all',
                 ['==', ['geometry-type'], 'LineString'],
                 ['!has', 'road_type']
@@ -1025,35 +1351,19 @@ class MapEditor {
         document.getElementById('building-type').value = properties.building_type || '';
         document.getElementById('building-icon').value = properties.icon || '';
         document.getElementById('feature-info').style.display = 'block';
-        
-        // Update delete button state
-        this.updateDeleteButtonState();
     }
 
-    updateDeleteButtonState() {
-        const deleteButton = document.getElementById('delete');
-        const hasSelectedFeature = this.selectedFeature || this.draw.getAll().features.length > 0;
-        
-        if (this.editingEnabled && hasSelectedFeature) {
-            deleteButton.style.backgroundColor = '#dc3545';
-            deleteButton.style.opacity = '1';
-            deleteButton.textContent = '🗑️ Delete Selected';
-        } else if (this.editingEnabled) {
-            deleteButton.style.backgroundColor = '#6c757d';
-            deleteButton.style.opacity = '0.7';
-            deleteButton.textContent = 'Delete';
-        } else {
-            deleteButton.style.backgroundColor = '#6c757d';
-            deleteButton.style.opacity = '0.5';
-            deleteButton.textContent = 'Delete';
-        }
-    }
 
     hideFeatureInfo() {
+        // Save any pending updates before hiding
+        if (this.pendingUpdate) {
+            this.savePendingUpdate();
+        }
+        
         document.getElementById('feature-info').style.display = 'none';
         this.clearHighlight();
+        this.cleanupMidpointHandles();
         this.selectedFeature = null;
-        this.updateDeleteButtonState();
     }
 
     deleteSelectedFeature() {
@@ -1062,54 +1372,68 @@ class MapEditor {
             return;
         }
 
-        // Check if there's a feature being edited in draw mode
-        const drawFeatures = this.draw.getAll().features;
-        if (drawFeatures.length > 0) {
-            if (confirm('Are you sure you want to delete this feature?')) {
-                const drawFeature = drawFeatures[0];
-                const originalId = drawFeature.properties.originalId;
-                
-                if (originalId) {
-                    // Delete existing feature from server
-                    this.deleteFeatureFromServer(originalId);
-                    this.draw.deleteAll();
-                } else {
-                    // Delete new draw feature
-                    this.draw.delete(drawFeature.id);
-                }
-                
-                this.clearHighlight();
-                this.hideFeatureInfo();
-                this.selectedFeature = null;
-            }
-        } else if (this.selectedFeature) {
-            // Delete selected feature that's not in edit mode
-            if (confirm('Are you sure you want to delete this feature?')) {
-                const featureId = this.selectedFeature.properties.id;
-                
-                if (featureId) {
-                    this.deleteFeatureFromServer(featureId);
-                }
-                
-                this.clearHighlight();
-                this.hideFeatureInfo();
-                this.selectedFeature = null;
-            }
-        } else {
-            alert('Please select a feature to delete by clicking on it first.');
+        if (!this.selectedFeature) {
+            alert('No feature selected. Please click on a feature first.');
+            return;
+        }
+
+        const featureName = this.selectedFeature.properties.name || 'Unnamed Feature';
+        const featureId = this.selectedFeature.properties.id;
+        console.log('Selected feature:', this.selectedFeature.properties);
+        console.log('Attempting to delete feature:', {
+            id: featureId,
+            name: featureName,
+            feature: this.selectedFeature
+        });
+
+        if (!featureId) {
+            alert('Cannot delete feature: No ID found. This might be a newly created feature that hasn\'t been saved yet.');
+            return;
+        }
+
+        if (confirm(`Are you sure you want to delete "${featureName}"?`)) {
+            this.deleteFeatureFromServer(featureId);
         }
     }
 
-    clearAllFeatures() {
-        if (confirm('Are you sure you want to clear all features?')) {
-            if (this.map.getSource('features')) {
-                this.map.getSource('features').setData({
-                    type: 'FeatureCollection',
-                    features: []
+    async clearAllFeatures() {
+        if (confirm('Are you sure you want to clear all features? This will delete ALL features from the database permanently.')) {
+            try {
+                // Delete all features from the database
+                const response = await fetch('/api/features/clear-all', {
+                    method: 'DELETE'
                 });
+
+                if (response.ok) {
+                    console.log('All features cleared from database');
+                    
+                    // Clear local memory
+                    this.features.clear();
+                    
+                    // Hide any open feature info panels
+                    this.hideFeatureInfo();
+                    
+                    // Clear any drawing features
+                    if (this.draw) {
+                        this.draw.deleteAll();
+                    }
+                    
+                    // Clear any highlights
+                    this.clearHighlight();
+                    
+                    // Martin vector tiles will automatically update since database is cleared
+                    console.log('Map cleared successfully - Martin tiles will refresh automatically');
+                    
+                    alert('All features cleared successfully!');
+                } else {
+                    const errorText = await response.text();
+                    console.error('Failed to clear features:', response.status, errorText);
+                    alert(`Failed to clear features: ${response.status} - ${errorText}`);
+                }
+            } catch (error) {
+                console.error('Error clearing features:', error);
+                alert('Error clearing features. Please try again.');
             }
-            this.features.clear();
-            this.hideFeatureInfo();
         }
     }
 
@@ -1222,18 +1546,39 @@ class MapEditor {
 
     async deleteFeatureFromServer(featureId) {
         try {
+            console.log('Sending DELETE request for feature ID:', featureId);
             const response = await fetch(`/api/features/${featureId}`, {
                 method: 'DELETE'
             });
 
             if (response.ok) {
-                console.log('Feature deleted successfully');
+                console.log('Feature deleted successfully from server');
+                
+                // Clean up all editing state
+                this.draw.deleteAll();
+                this.showOriginalFeature();
+                this.cleanupMidpointHandles();
+                this.clearHighlight();
+                
+                // Hide feature info panel
+                this.hideFeatureInfo();
+                
+                // Reload features to reflect deletion
                 await this.loadFeatures();
+                
+                // Clear selection
+                this.selectedFeature = null;
+                
+                console.log('Feature deletion completed successfully');
+                
             } else {
-                console.error('Failed to delete feature');
+                const errorText = await response.text();
+                console.error('Failed to delete feature:', response.status, errorText);
+                alert(`Failed to delete feature: ${response.status} - ${errorText}`);
             }
         } catch (error) {
             console.error('Error deleting feature:', error);
+            alert('Error deleting feature. Please try again.');
         }
     }
 

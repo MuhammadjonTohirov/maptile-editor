@@ -13,7 +13,11 @@
       "Bash(pip install:*)",
       "Bash(rm:*)",
       "Bash(grep:*)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(sudo rm:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker run:*)",
+      "Bash(cp:*)"
     ],
     "deny": []
   }
