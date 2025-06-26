@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Map Editor</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@8.1.0/ol.css">
+    <link href="https://unpkg.com/maplibre-gl@4.0.2/dist/maplibre-gl.css" rel="stylesheet" />
     <style>
         body {
             margin: 0;
@@ -126,6 +126,11 @@
         </div>
         
         <div class="control-group">
+            <label>Map Options</label>
+            <button id="toggle-3d" class="toggle-button">🏢 Enable 3D</button>
+        </div>
+        
+        <div class="control-group">
             <label>Map Info</label>
             <div id="zoom-level" style="background: #f0f0f0; padding: 5px; border-radius: 3px; font-size: 12px;">
                 Zoom: <span id="current-zoom">2</span>
@@ -167,7 +172,9 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/ol@8.1.0/dist/ol.js"></script>
+    <script src="https://unpkg.com/maplibre-gl@4.0.2/dist/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/@mapbox/mapbox-gl-draw@1.4.3/dist/mapbox-gl-draw.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/@mapbox/mapbox-gl-draw@1.4.3/dist/mapbox-gl-draw.css" type="text/css" />
     <script src="js/map-editor.js"></script>
 </body>
 </html>

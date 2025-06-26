@@ -41,6 +41,15 @@ async def get_features(db: AsyncSession = Depends(get_db)):
             Feature.name,
             Feature.description,
             Feature.properties,
+            Feature.building_number,
+            Feature.building_type,
+            Feature.icon,
+            Feature.osm_id,
+            Feature.road_type,
+            Feature.direction,
+            Feature.lane_count,
+            Feature.max_speed,
+            Feature.surface,
             ST_AsGeoJSON(Feature.geometry).label("geometry_json")
         )
     )
@@ -50,10 +59,24 @@ async def get_features(db: AsyncSession = Depends(get_db)):
     for feature in features:
         geometry = json.loads(feature.geometry_json) if feature.geometry_json else None
         properties = feature.properties or {}
+        
+        # Add all feature properties to the properties object
         properties.update({
             "name": feature.name,
-            "description": feature.description
+            "description": feature.description,
+            "building_number": feature.building_number,
+            "building_type": feature.building_type,
+            "icon": feature.icon,
+            "osm_id": feature.osm_id,
+            "road_type": feature.road_type,
+            "direction": feature.direction,
+            "lane_count": feature.lane_count,
+            "max_speed": feature.max_speed,
+            "surface": feature.surface
         })
+        
+        # Remove None values to keep the JSON clean
+        properties = {k: v for k, v in properties.items() if v is not None}
         
         geojson_features.append(GeoJSONFeature(
             id=feature.id,
