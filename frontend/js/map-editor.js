@@ -1,48 +1,86 @@
 class MapEditor {
     constructor() {
         this.selectedFeature = null;
-        this.currentInteraction = null;
-        this.polygonModify = null;
-        this.editingEnabled = false; // Start with editing disabled
+        this.editingEnabled = false;
+        this.is3DEnabled = false;
+        this.draw = null;
+        this.map = null;
+        this.features = new Map(); // Store features by ID
+        
         this.initMap();
-        this.initLayers();
-        this.initInteractions();
         this.initControls();
         this.loadFeatures();
-        // Disable editing by default
         this.disableEditing();
     }
 
     initMap() {
-        this.map = new ol.Map({
-            target: 'map',
-            layers: [
-                new ol.layer.Tile({
-                    source: new ol.source.OSM()
-                })
-            ],
-            view: new ol.View({
-                center: ol.proj.fromLonLat([0, 0]),
-                zoom: 2
-            })
+        this.map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    'osm': {
+                        type: 'raster',
+                        tiles: [
+                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+                        ],
+                        tileSize: 256,
+                        attribution: '© OpenStreetMap contributors'
+                    }
+                },
+                layers: [
+                    {
+                        id: 'osm',
+                        type: 'raster',
+                        source: 'osm'
+                    }
+                ]
+            },
+            center: [0, 0],
+            zoom: 2,
+            pitch: 0,
+            bearing: 0
         });
-        
-        // Try to center map on user's current location (without button interaction)
+
+        // Add navigation controls
+        this.map.addControl(new maplibregl.NavigationControl());
+
+        // Initialize drawing tools
+        this.draw = new MapboxDraw({
+            displayControlsDefault: false,
+            controls: {
+                point: true,
+                line_string: true,
+                polygon: true,
+                trash: true
+            }
+        });
+
+        // Update zoom display
+        this.map.on('zoom', () => {
+            const zoom = Math.round(this.map.getZoom());
+            document.getElementById('current-zoom').textContent = zoom;
+            this.updateFeatureVisibility();
+        });
+
+        // Handle feature selection
+        this.map.on('click', (e) => {
+            this.handleMapClick(e);
+        });
+
+        // Try to center map on user's location
         this.getUserLocationAutomatic();
+
+        // Add keyboard shortcuts
+        this.addKeyboardShortcuts();
     }
 
     getUserLocation() {
-        console.log('getUserLocation called');
-        
         if (!navigator.geolocation) {
-            console.log('Geolocation not supported by this browser');
             alert('Geolocation is not supported by this browser');
             return;
         }
 
-        console.log('Requesting geolocation...');
-        
-        // Show loading indicator
         const button = document.getElementById('my-location');
         const originalText = button.textContent;
         button.textContent = '🔄 Getting location...';
@@ -50,660 +88,98 @@ class MapEditor {
 
         navigator.geolocation.getCurrentPosition(
             (position) => {
-                console.log('Geolocation success:', position);
                 const coords = [position.coords.longitude, position.coords.latitude];
-                const mapCenter = ol.proj.fromLonLat(coords);
                 
-                this.map.getView().animate({
-                    center: mapCenter,
+                this.map.flyTo({
+                    center: coords,
                     zoom: 15,
                     duration: 1000
                 });
                 
-                console.log(`Map centered on user location: ${coords[1]}, ${coords[0]}`);
-                
-                // Reset button
                 button.textContent = originalText;
                 button.disabled = false;
             },
             (error) => {
-                console.error('Geolocation error:', error);
                 let errorMessage = 'Could not get your location: ';
-                
                 switch(error.code) {
                     case error.PERMISSION_DENIED:
-                        errorMessage += 'Permission denied. Please allow location access and try again.';
+                        errorMessage += 'Permission denied.';
                         break;
                     case error.POSITION_UNAVAILABLE:
-                        errorMessage += 'Location information is unavailable.';
+                        errorMessage += 'Location unavailable.';
                         break;
                     case error.TIMEOUT:
-                        errorMessage += 'The request to get location timed out.';
+                        errorMessage += 'Request timeout.';
                         break;
                     default:
-                        errorMessage += 'An unknown error occurred.';
+                        errorMessage += 'Unknown error.';
                         break;
                 }
-                
-                console.log(errorMessage);
                 alert(errorMessage);
-                
-                // Reset button
                 button.textContent = originalText;
                 button.disabled = false;
             },
             {
                 enableHighAccuracy: true,
                 timeout: 15000,
-                maximumAge: 60000 // 1 minute
+                maximumAge: 60000
             }
         );
     }
 
     getUserLocationAutomatic() {
-        console.log('Automatic geolocation called');
-        
-        if (!navigator.geolocation) {
-            console.log('Geolocation not supported by this browser');
-            return;
-        }
+        if (!navigator.geolocation) return;
 
         navigator.geolocation.getCurrentPosition(
             (position) => {
-                console.log('Automatic geolocation success:', position);
                 const coords = [position.coords.longitude, position.coords.latitude];
-                const mapCenter = ol.proj.fromLonLat(coords);
-                
-                this.map.getView().setCenter(mapCenter);
-                this.map.getView().setZoom(13);
-                
-                console.log(`Map automatically centered on user location: ${coords[1]}, ${coords[0]}`);
+                this.map.setCenter(coords);
+                this.map.setZoom(13);
             },
             (error) => {
                 console.log('Automatic geolocation failed:', error.message);
-                console.log('Using default map center');
             },
             {
                 enableHighAccuracy: false,
                 timeout: 10000,
-                maximumAge: 300000 // 5 minutes
+                maximumAge: 300000
             }
         );
     }
 
-    initLayers() {
-        this.vectorSource = new ol.source.Vector();
-        this.vectorLayer = new ol.layer.Vector({
-            source: this.vectorSource,
-            style: this.getFeatureStyle.bind(this)
-        });
-        this.map.addLayer(this.vectorLayer);
-        
-        // Add zoom change listener for feature visibility
-        this.map.getView().on('change:resolution', () => {
-            this.updateFeatureVisibility();
-        });
-    }
-
-    getFeatureStyle(feature) {
-        const geometry = feature.getGeometry();
-        const geometryType = geometry.getType();
-        const isInPolygonEditMode = feature.get('polygon_edit_mode') === true;
-        const properties = feature.get('properties') || {};
-        const roadType = feature.get('road_type') || properties.road_type;
-        const direction = feature.get('direction') || properties.direction;
-        const featureType = properties.feature_type;
-        
-        // Check if feature should be visible at current zoom level
-        const currentZoom = this.map.getView().getZoom();
-        if (!this.shouldShowFeature(feature, currentZoom)) {
-            return null; // Hide feature
-        }
-        
-        let style;
-        
-        // Handle roads (LineString with road properties)
-        if (geometryType === 'LineString' && (featureType === 'road' || roadType)) {
-            const roadColor = this.getRoadColor(roadType);
-            const roadWidth = this.getRoadWidth(roadType);
-            
-            const styles = [];
-            
-            // Handle bidirectional roads with dual lanes (only at detailed zoom levels)
-            if (direction === 'bidirectional' && currentZoom >= 15) {
-                styles.push(...this.getBidirectionalRoadStyles(roadColor, roadWidth));
-            } else {
-                // Single lane road
-                styles.push(new ol.style.Style({
-                    stroke: new ol.style.Stroke({
-                        color: roadColor,
-                        width: roadWidth
-                    })
-                }));
-                
-                // Add direction indicators based on zoom level
-                if (direction && direction !== 'bidirectional') {
-                    if (currentZoom >= 14 && currentZoom <= 16) {
-                        // Triangular arrows for zoom 14-16
-                        const arrowStyle = this.getArrowStyle(direction, roadColor);
-                        if (arrowStyle) {
-                            styles.push(arrowStyle);
-                        }
-                    } else if (currentZoom > 16) {
-                        // Rectangular indicators for zoom > 16
-                        styles.push(...this.getRoadRectangularStyles(roadColor, roadWidth, roadType));
-                    }
-                }
-            }
-            
-            style = styles;
-        }
-        // Handle other geometries
-        else {
-            switch (geometryType) {
-                case 'Point':
-                    // Check if this is a street light
-                    if (featureType === 'streetlight') {
-                        style = new ol.style.Style({
-                            image: new ol.style.Circle({
-                                radius: 10,
-                                fill: new ol.style.Fill({ color: 'rgba(255, 255, 0, 0.8)' }), // Yellow for visibility
-                                stroke: new ol.style.Stroke({ color: '#ff8c00', width: 2 })
-                            }),
-                            text: new ol.style.Text({
-                                text: '💡',
-                                font: '16px Arial',
-                                fill: new ol.style.Fill({ color: '#000' }),
-                                offsetY: 0
-                            })
-                        });
-                    } else if (featureType === 'traffic_light') {
-                        style = new ol.style.Style({
-                            image: new ol.style.Circle({
-                                radius: 12,
-                                fill: new ol.style.Fill({ color: 'rgba(255, 0, 0, 0.8)' }), // Red for traffic lights
-                                stroke: new ol.style.Stroke({ color: '#8B0000', width: 3 })
-                            }),
-                            text: new ol.style.Text({
-                                text: '🚦',
-                                font: '18px Arial',
-                                fill: new ol.style.Fill({ color: '#000' }),
-                                offsetY: 0
-                            })
-                        });
-                    } else {
-                        style = new ol.style.Style({
-                            image: new ol.style.Circle({
-                                radius: 8,
-                                fill: new ol.style.Fill({ color: 'rgba(0, 124, 186, 0.7)' }),
-                                stroke: new ol.style.Stroke({ color: '#007cba', width: 2 })
-                            })
-                        });
-                    }
-                    break;
-                case 'LineString':
-                    style = new ol.style.Style({
-                        stroke: new ol.style.Stroke({
-                            color: '#007cba',
-                            width: 3
-                        })
-                    });
-                    break;
-                case 'Polygon':
-                    style = new ol.style.Style({
-                        fill: new ol.style.Fill({ 
-                            color: isInPolygonEditMode ? 'rgba(255, 107, 53, 0.3)' : 'rgba(0, 124, 186, 0.3)' 
-                        }),
-                        stroke: new ol.style.Stroke({ 
-                            color: isInPolygonEditMode ? '#ff6b35' : '#007cba', 
-                            width: isInPolygonEditMode ? 3 : 2 
-                        })
-                    });
-                    break;
-                default:
-                    style = new ol.style.Style({
-                        fill: new ol.style.Fill({ color: 'rgba(0, 124, 186, 0.3)' }),
-                        stroke: new ol.style.Stroke({ color: '#007cba', width: 2 }),
-                        image: new ol.style.Circle({
-                            radius: 8,
-                            fill: new ol.style.Fill({ color: 'rgba(0, 124, 186, 0.7)' }),
-                            stroke: new ol.style.Stroke({ color: '#007cba', width: 2 })
-                        })
-                    });
-            }
-        }
-        
-        return style;
-    }
-
-    getRoadColor(roadType) {
-        // Color roads by type
-        switch (roadType) {
-            case 'motorway':
-            case 'motorway_link':
-                return '#e892a2';  // Pink for highways
-            case 'trunk':
-            case 'trunk_link':
-                return '#f9b29c';  // Orange for major roads
-            case 'primary':
-            case 'primary_link':
-                return '#fcd6a4';  // Light orange for primary roads
-            case 'secondary':
-            case 'secondary_link':
-                return '#f7fabf';  // Yellow for secondary roads
-            case 'tertiary':
-            case 'tertiary_link':
-                return '#ffffff';  // White for tertiary roads
-            case 'residential':
-                return '#e8e8e8';  // Light gray for residential
-            case 'service':
-                return '#cccccc';  // Gray for service roads
-            case 'footway':
-            case 'path':
-            case 'cycleway':
-                return '#fa8072';  // Salmon for paths
-            case 'steps':
-                return '#fe9a76';  // Light salmon for steps
-            default:
-                return '#999999';  // Default gray
-        }
-    }
-
-    getRoadWidth(roadType) {
-        // Width roads by type
-        switch (roadType) {
-            case 'motorway':
-            case 'motorway_link':
-                return 8;
-            case 'trunk':
-            case 'trunk_link':
-                return 7;
-            case 'primary':
-            case 'primary_link':
-                return 6;
-            case 'secondary':
-            case 'secondary_link':
-                return 5;
-            case 'tertiary':
-            case 'tertiary_link':
-                return 4;
-            case 'residential':
-                return 3;
-            case 'service':
-                return 2;
-            case 'footway':
-            case 'path':
-            case 'cycleway':
-            case 'steps':
-                return 2;
-            default:
-                return 3;
-        }
-    }
-
-    getArrowStyle(direction, roadColor) {
-        // Create arrow style for road direction
-        return new ol.style.Style({
-            geometry: function(feature) {
-                const geometry = feature.getGeometry();
-                const coordinates = geometry.getCoordinates();
-                
-                if (coordinates.length < 2) return null;
-                
-                // Calculate arrow positions along the line
-                const arrows = [];
-                const totalLength = coordinates.length;
-                const step = Math.max(1, Math.floor(totalLength / 4)); // Place arrows every 25% of the line
-                
-                for (let i = step; i < totalLength - 1; i += step) {
-                    arrows.push(coordinates[i]);
-                }
-                
-                return new ol.geom.MultiPoint(arrows);
-            },
-            image: new ol.style.RegularShape({
-                fill: new ol.style.Fill({ color: roadColor }),
-                stroke: new ol.style.Stroke({ color: '#fff', width: 1 }),
-                points: 3,
-                radius: 8,
-                rotation: direction === 'oneway_reverse' ? Math.PI : 0,
-                angle: 0
-            })
-        });
-    }
-
-    getBidirectionalRoadStyles(roadColor, roadWidth) {
-        const styles = [];
-        const laneWidth = Math.max(2, roadWidth / 3); // Each lane is 1/3 of total width, minimum 2px
-        const laneOffset = roadWidth / 4; // Offset from center
-        
-        // Left lane (slightly offset to the left)
-        styles.push(new ol.style.Style({
-            geometry: function(feature) {
-                return this.getOffsetLineString(feature.getGeometry(), -laneOffset);
-            }.bind(this),
-            stroke: new ol.style.Stroke({
-                color: roadColor,
-                width: laneWidth
-            })
-        }));
-        
-        // Right lane (slightly offset to the right)
-        styles.push(new ol.style.Style({
-            geometry: function(feature) {
-                return this.getOffsetLineString(feature.getGeometry(), laneOffset);
-            }.bind(this),
-            stroke: new ol.style.Stroke({
-                color: roadColor,
-                width: laneWidth
-            })
-        }));
-        
-        // Center divider line (thin yellow line)
-        styles.push(new ol.style.Style({
-            stroke: new ol.style.Stroke({
-                color: '#ffd700', // Gold/yellow for center line
-                width: 1,
-                lineDash: [5, 5] // Dashed line
-            })
-        }));
-        
-        return styles;
-    }
-
-    getRoadRectangularStyles(roadColor, roadWidth, roadType) {
-        const styles = [];
-        
-        // Create rectangular direction indicators for roads at high zoom levels
-        styles.push(new ol.style.Style({
-            geometry: function(feature) {
-                const geometry = feature.getGeometry();
-                const coordinates = geometry.getCoordinates();
-                
-                if (coordinates.length < 2) return null;
-                
-                // Calculate intervals for direction indicators
-                const totalLength = coordinates.length;
-                const step = Math.max(2, Math.floor(totalLength / 5)); // Place 5 indicators per road
-                
-                const indicators = [];
-                for (let i = step; i < totalLength - 1; i += step) {
-                    indicators.push(coordinates[i]);
-                }
-                
-                return new ol.geom.MultiPoint(indicators);
-            },
-            image: new ol.style.RegularShape({
-                fill: new ol.style.Fill({ color: roadColor }),
-                stroke: new ol.style.Stroke({ 
-                    color: this.getDarkerColor(roadColor), 
-                    width: 2 
-                }),
-                points: 4, // Rectangle
-                radius: 8,
-                radius2: 4, // Make it more rectangular (not square)
-                angle: 0 // No rotation - proper rectangle orientation
-            })
-        }));
-        
-        return styles;
-    }
-
-
-    getDarkerColor(color) {
-        // Convert color to darker version for border
-        if (color.startsWith('#')) {
-            // Handle hex colors
-            const hex = color.slice(1);
-            const r = Math.max(0, parseInt(hex.slice(0, 2), 16) - 40);
-            const g = Math.max(0, parseInt(hex.slice(2, 4), 16) - 40);
-            const b = Math.max(0, parseInt(hex.slice(4, 6), 16) - 40);
-            return `rgb(${r}, ${g}, ${b})`;
-        } else {
-            // Return a default darker color
-            return '#333333';
-        }
-    }
-
-    getOffsetLineString(geometry, offset) {
-        // Create a parallel line offset from the original
-        const coordinates = geometry.getCoordinates();
-        const offsetCoords = [];
-        
-        for (let i = 0; i < coordinates.length; i++) {
-            const coord = coordinates[i];
-            let perpendicular;
-            
-            if (i === 0) {
-                // First point - use direction to next point
-                const next = coordinates[i + 1];
-                perpendicular = this.getPerpendicular(coord, next);
-            } else if (i === coordinates.length - 1) {
-                // Last point - use direction from previous point
-                const prev = coordinates[i - 1];
-                perpendicular = this.getPerpendicular(prev, coord);
-            } else {
-                // Middle point - average of two directions
-                const prev = coordinates[i - 1];
-                const next = coordinates[i + 1];
-                const perp1 = this.getPerpendicular(prev, coord);
-                const perp2 = this.getPerpendicular(coord, next);
-                perpendicular = [(perp1[0] + perp2[0]) / 2, (perp1[1] + perp2[1]) / 2];
-            }
-            
-            // Apply offset
-            const offsetCoord = [
-                coord[0] + perpendicular[0] * offset,
-                coord[1] + perpendicular[1] * offset
-            ];
-            offsetCoords.push(offsetCoord);
-        }
-        
-        return new ol.geom.LineString(offsetCoords);
-    }
-
-    getPerpendicular(point1, point2) {
-        // Get normalized perpendicular vector
-        const dx = point2[0] - point1[0];
-        const dy = point2[1] - point1[1];
-        const length = Math.sqrt(dx * dx + dy * dy);
-        
-        if (length === 0) return [0, 0];
-        
-        // Perpendicular vector (rotated 90 degrees)
-        return [-dy / length * 0.00001, dx / length * 0.00001]; // Scale down for map coordinates
-    }
-
-    shouldShowFeature(feature, zoom) {
-        const properties = feature.get('properties') || {};
-        const roadType = feature.get('road_type') || properties.road_type;
-        const featureType = properties.feature_type;
-        const geometryType = feature.getGeometry().getType();
-        
-        // Define zoom thresholds for different feature types
-        const zoomThresholds = {
-            // Major roads - visible at all zooms
-            motorway: 0,
-            motorway_link: 0,
-            trunk: 0,
-            trunk_link: 0,
-            
-            // Primary roads - visible from zoom 8+
-            primary: 8,
-            primary_link: 8,
-            
-            // Secondary roads - visible from zoom 10+
-            secondary: 10,
-            secondary_link: 10,
-            
-            // Tertiary roads - visible from zoom 12+
-            tertiary: 12,
-            tertiary_link: 12,
-            
-            // Residential roads - visible from zoom 14+
-            residential: 14,
-            service: 14,
-            
-            // Paths and footways - visible from zoom 16+
-            footway: 16,
-            path: 16,
-            cycleway: 16,
-            steps: 16,
-            
-            // Buildings - visible from zoom 15+
-            building: 15,
-            
-            // Street lights - visible from zoom 16+ (high detail level)
-            streetlight: 16,
-            
-            // Traffic lights - visible from zoom 16+ (traffic navigation level)
-            traffic_light: 16,
-            
-            // Turning points - visible from zoom 17+ (very detailed level)
-            turning_point: 17,
-            
-            // Points and custom features - visible from zoom 13+
-            point: 13,
-            custom: 13
-        };
-        
-        let minZoom = 0;
-        
-        if (featureType === 'road' && roadType) {
-            // Road features
-            minZoom = zoomThresholds[roadType] || 10;
-        } else if (featureType === 'turning_point' || roadType === 'turning_point') {
-            // Turning points - only visible at very high zoom
-            minZoom = zoomThresholds.turning_point;
-        } else if (featureType === 'streetlight') {
-            // Street lights - visible at high zoom level
-            minZoom = zoomThresholds.streetlight;
-        } else if (featureType === 'traffic_light') {
-            // Traffic lights - visible at traffic navigation level
-            minZoom = zoomThresholds.traffic_light;
-        } else if (geometryType === 'Polygon') {
-            // Buildings and polygons
-            minZoom = zoomThresholds.building;
-        } else if (geometryType === 'Point') {
-            // Points
-            minZoom = zoomThresholds.point;
-        } else {
-            // Custom features and lines
-            minZoom = zoomThresholds.custom;
-        }
-        
-        return zoom >= minZoom;
-    }
-
-    updateFeatureVisibility() {
-        // Update zoom level display
-        const currentZoom = Math.round(this.map.getView().getZoom());
-        document.getElementById('current-zoom').textContent = currentZoom;
-        
-        // Force re-render of all features to update visibility
-        this.vectorLayer.getSource().changed();
-    }
-
-    getVertexStyle() {
-        // Style for polygon vertices (draggable handles)
-        return new ol.style.Style({
-            image: new ol.style.Circle({
-                radius: 8,
-                fill: new ol.style.Fill({
-                    color: 'white'
-                }),
-                stroke: new ol.style.Stroke({
-                    color: '#007cba',
-                    width: 3
-                })
-            })
-        });
-    }
-
-    initInteractions() {
-        this.drawPoint = new ol.interaction.Draw({
-            source: this.vectorSource,
-            type: 'Point'
-        });
-
-        this.drawLine = new ol.interaction.Draw({
-            source: this.vectorSource,
-            type: 'LineString'
-        });
-
-        this.drawPolygon = new ol.interaction.Draw({
-            source: this.vectorSource,
-            type: 'Polygon'
-        });
-
-        // Enhanced modify interaction with custom vertex styling - always active
-        this.modify = new ol.interaction.Modify({
-            source: this.vectorSource,
-            style: this.getVertexStyle.bind(this)
-        });
-
-        // Add modify end event to auto-save when polygon is changed
-        this.modify.on('modifyend', (event) => {
-            const modifiedFeature = event.features.getArray()[0];
-            if (modifiedFeature) {
-                console.log('Polygon modified - auto-saving...');
-                this.selectedFeature = modifiedFeature;
-                this.autoSaveModifiedFeature(modifiedFeature);
-            }
-        });
-
-        this.select = new ol.interaction.Select({
-            layers: [this.vectorLayer]
-        });
-
-        this.select.on('select', (event) => {
-            if (event.selected.length > 0) {
-                this.selectedFeature = event.selected[0];
-                this.showFeatureInfo(this.selectedFeature);
-            } else {
-                this.selectedFeature = null;
-                this.hideFeatureInfo();
-            }
-        });
-
-        // Always add select interaction so polygons are always selectable
-        this.map.addInteraction(this.select);
-        // Modify interaction will be added/removed based on editing state
-
-        [this.drawPoint, this.drawLine, this.drawPolygon].forEach(interaction => {
-            interaction.on('drawend', (event) => {
-                this.selectedFeature = event.feature;
-                this.showFeatureInfo(this.selectedFeature);
-            });
-        });
-    }
-
     initControls() {
+        // Editing toggle
         document.getElementById('toggle-editing').addEventListener('click', () => {
             this.toggleEditing();
         });
 
+        // 3D toggle
+        document.getElementById('toggle-3d').addEventListener('click', () => {
+            this.toggle3D();
+        });
+
+        // Drawing tools
         document.getElementById('draw-point').addEventListener('click', () => {
-            this.setActiveInteraction('point');
+            this.setDrawingMode('draw_point');
         });
 
         document.getElementById('draw-line').addEventListener('click', () => {
-            this.setActiveInteraction('line');
+            this.setDrawingMode('draw_line_string');
         });
 
         document.getElementById('draw-polygon').addEventListener('click', () => {
-            this.setActiveInteraction('polygon');
+            this.setDrawingMode('draw_polygon');
         });
 
-
         document.getElementById('select').addEventListener('click', () => {
-            this.setActiveInteraction('select');
+            this.setDrawingMode('simple_select');
         });
 
         document.getElementById('delete').addEventListener('click', () => {
             this.deleteSelectedFeature();
         });
 
+        // Data operations
         document.getElementById('clear-all').addEventListener('click', () => {
             this.clearAllFeatures();
         });
@@ -716,6 +192,7 @@ class MapEditor {
             this.loadFeatures();
         });
 
+        // Feature editing
         document.getElementById('save-feature').addEventListener('click', () => {
             this.saveSelectedFeature();
         });
@@ -724,10 +201,12 @@ class MapEditor {
             this.hideFeatureInfo();
         });
 
+        // Location
         document.getElementById('my-location').addEventListener('click', () => {
             this.getUserLocation();
         });
 
+        // OSM data loading
         document.getElementById('load-buildings').addEventListener('click', () => {
             this.loadOSMBuildings();
         });
@@ -745,46 +224,122 @@ class MapEditor {
         });
     }
 
-    setActiveInteraction(type) {
-        // Check if editing is enabled for drawing tools
-        if (!this.editingEnabled && ['point', 'line', 'polygon'].includes(type)) {
+    toggle3D() {
+        this.is3DEnabled = !this.is3DEnabled;
+        const button = document.getElementById('toggle-3d');
+        
+        if (this.is3DEnabled) {
+            // Enable 3D mode
+            this.map.easeTo({
+                pitch: 60,
+                bearing: 0,
+                duration: 1000
+            });
+            button.textContent = '🌍 Disable 3D';
+            button.classList.add('editing-enabled');
+            
+            // Add building extrusions
+            this.addBuildingExtrusions();
+        } else {
+            // Disable 3D mode
+            this.map.easeTo({
+                pitch: 0,
+                bearing: 0,
+                duration: 1000
+            });
+            button.textContent = '🏢 Enable 3D';
+            button.classList.remove('editing-enabled');
+            
+            // Remove building extrusions
+            this.removeBuildingExtrusions();
+        }
+    }
+
+    addBuildingExtrusions() {
+        // Add 3D building layer if it doesn't exist
+        if (!this.map.getLayer('buildings-3d')) {
+            this.map.addLayer({
+                id: 'buildings-3d',
+                type: 'fill-extrusion',
+                source: 'features',
+                filter: ['==', ['geometry-type'], 'Polygon'],
+                paint: {
+                    'fill-extrusion-color': [
+                        'case',
+                        ['has', 'building_type'],
+                        [
+                            'match',
+                            ['get', 'building_type'],
+                            'residential', '#4a90e2',
+                            'commercial', '#f5a623',
+                            'industrial', '#bd10e0',
+                            'office', '#50e3c2',
+                            '#7ed321' // default
+                        ],
+                        '#cccccc'
+                    ],
+                    'fill-extrusion-height': [
+                        'case',
+                        ['has', 'height'],
+                        ['get', 'height'],
+                        [
+                            'case',
+                            ['has', 'building_type'],
+                            [
+                                'match',
+                                ['get', 'building_type'],
+                                'residential', 15,
+                                'commercial', 25,
+                                'industrial', 12,
+                                'office', 40,
+                                20 // default
+                            ],
+                            10
+                        ]
+                    ],
+                    'fill-extrusion-base': 0,
+                    'fill-extrusion-opacity': 0.8
+                }
+            });
+        }
+    }
+
+    removeBuildingExtrusions() {
+        if (this.map.getLayer('buildings-3d')) {
+            this.map.removeLayer('buildings-3d');
+        }
+    }
+
+    setDrawingMode(mode) {
+        if (!this.editingEnabled && ['draw_point', 'draw_line_string', 'draw_polygon'].includes(mode)) {
             alert('Please enable editing first by clicking the "🔒 Lock Editing" button');
             return;
         }
-        
-        this.map.removeInteraction(this.currentInteraction);
-        
+
+        // Clear active states
         document.querySelectorAll('.controls button').forEach(btn => {
             btn.classList.remove('active');
         });
 
-        switch (type) {
-            case 'point':
-                this.currentInteraction = this.drawPoint;
-                document.getElementById('draw-point').classList.add('active');
-                break;
-            case 'line':
-                this.currentInteraction = this.drawLine;
-                document.getElementById('draw-line').classList.add('active');
-                break;
-            case 'polygon':
-                this.currentInteraction = this.drawPolygon;
-                document.getElementById('draw-polygon').classList.add('active');
-                break;
-            case 'select':
-                this.currentInteraction = this.select;
-                document.getElementById('select').classList.add('active');
-                break;
-        }
+        // Set new mode
+        this.draw.changeMode(mode);
 
-        if (this.currentInteraction) {
-            this.map.addInteraction(this.currentInteraction);
+        // Update button state
+        const buttonMap = {
+            'draw_point': 'draw-point',
+            'draw_line_string': 'draw-line',
+            'draw_polygon': 'draw-polygon',
+            'simple_select': 'select'
+        };
+
+        const buttonId = buttonMap[mode];
+        if (buttonId) {
+            document.getElementById(buttonId).classList.add('active');
         }
     }
 
     toggleEditing() {
         this.editingEnabled = !this.editingEnabled;
-        
         const button = document.getElementById('toggle-editing');
         
         if (this.editingEnabled) {
@@ -799,106 +354,766 @@ class MapEditor {
     }
 
     enableEditing() {
-        // Add modify interaction for polygon editing
-        this.map.addInteraction(this.modify);
+        // Add drawing controls to map
+        this.map.addControl(this.draw);
         
         // Enable drawing tools
         document.querySelectorAll('#draw-point, #draw-line, #draw-polygon, #delete').forEach(btn => {
             btn.disabled = false;
             btn.style.opacity = '1';
         });
-        
-        console.log('Editing enabled - you can now modify features');
+
+        // Add drawing event listeners
+        this.map.on('draw.create', (e) => {
+            this.handleFeatureCreate(e);
+        });
+
+        this.map.on('draw.update', (e) => {
+            this.handleFeatureUpdate(e);
+        });
+
+        this.map.on('draw.delete', (e) => {
+            this.handleFeatureDelete(e);
+        });
     }
 
     disableEditing() {
-        // Remove modify interaction
-        this.map.removeInteraction(this.modify);
-        
-        // Remove any active drawing interactions
-        this.map.removeInteraction(this.currentInteraction);
-        this.currentInteraction = null;
+        // Clear any features being edited
+        if (this.draw) {
+            this.draw.deleteAll();
+            this.map.removeControl(this.draw);
+        }
         
         // Disable drawing tools
         document.querySelectorAll('#draw-point, #draw-line, #draw-polygon, #delete').forEach(btn => {
             btn.disabled = true;
             btn.style.opacity = '0.5';
         });
-        
-        // Clear active button states
+
+        // Clear active states
         document.querySelectorAll('.controls button').forEach(btn => {
             btn.classList.remove('active');
         });
+
+        // Remove click handlers by clearing event listeners
+        this.removeLayerClickHandlers();
         
-        console.log('Editing disabled - features are protected from accidental changes');
+        // Clear any selection
+        this.clearHighlight();
+        this.hideFeatureInfo();
     }
 
-    autoSaveModifiedFeature(feature) {
-        const properties = feature.get('properties') || {};
-        
-        const geometry = feature.getGeometry();
-        const geoJsonGeometry = new ol.format.GeoJSON().writeGeometry(geometry, {
-            dataProjection: 'EPSG:4326',
-            featureProjection: 'EPSG:3857'
+    addKeyboardShortcuts() {
+        document.addEventListener('keydown', (e) => {
+            // Delete key for deleting selected features
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                // Prevent default only if we have a feature to delete
+                const hasSelectedFeature = this.selectedFeature || this.draw.getAll().features.length > 0;
+                if (hasSelectedFeature && this.editingEnabled) {
+                    e.preventDefault();
+                    this.deleteSelectedFeature();
+                }
+            }
+            
+            // Escape key to deselect
+            if (e.key === 'Escape') {
+                this.hideFeatureInfo();
+                this.draw.deleteAll();
+            }
         });
-        
-        // Ensure geometry is an object, not a string
-        const geometryObj = typeof geoJsonGeometry === 'string' ? JSON.parse(geoJsonGeometry) : geoJsonGeometry;
-        
-        const featureData = {
-            name: properties.name || feature.get('name') || '',
-            description: properties.description || feature.get('description') || '',
-            geometry: geometryObj,
-            properties: properties,
-            building_number: properties.building_number || feature.get('building_number') || '',
-            building_type: properties.building_type || feature.get('building_type') || '',
-            icon: properties.icon || feature.get('icon') || '',
-            osm_id: feature.get('osm_id') || null
-        };
+    }
 
-        const featureId = feature.get('id');
+    removeLayerClickHandlers() {
+        // Reset cursor
+        this.map.getCanvas().style.cursor = '';
         
-        if (featureId) {
-            this.updateFeatureOnServer(featureId, featureData);
-        } else {
-            this.createFeatureOnServer(featureData);
+        // Note: MapLibre doesn't have a direct way to remove specific event listeners
+        // The handlers will be disabled by the editing state check
+    }
+
+    addLayerClickHandlers() {
+        // List of all our feature layer IDs that should be clickable
+        const clickableLayers = [
+            'buildings', 'roads', 'streetlights', 'traffic-lights', 
+            'points', 'lines', 'debug-all-lines'
+        ];
+
+        clickableLayers.forEach(layerId => {
+            if (this.map.getLayer(layerId)) {
+                // Add click handler for each layer
+                this.map.on('click', layerId, (e) => {
+                    this.handleFeatureClick(e);
+                });
+
+                // Change cursor to pointer when hovering
+                this.map.on('mouseenter', layerId, () => {
+                    this.map.getCanvas().style.cursor = 'pointer';
+                });
+
+                this.map.on('mouseleave', layerId, () => {
+                    this.map.getCanvas().style.cursor = '';
+                });
+            }
+        });
+    }
+
+    handleFeatureClick(e) {
+        // Prevent map click event
+        e.preventDefault();
+        
+        const feature = e.features[0];
+        if (feature && feature.source === 'features') {
+            this.selectedFeature = feature;
+            this.showFeatureInfo(feature);
+            
+            // Highlight the selected feature
+            this.highlightFeature(feature);
+            
+            // If editing is enabled, add the feature to draw for editing
+            if (this.editingEnabled) {
+                this.makeFeatureEditable(feature);
+            }
+            
+            console.log('Selected feature:', feature);
         }
     }
 
+    makeFeatureEditable(feature) {
+        try {
+            // Clear any existing features in draw
+            this.draw.deleteAll();
+            
+            // Create a new feature for the draw layer
+            const editableFeature = {
+                type: 'Feature',
+                geometry: feature.geometry,
+                properties: {
+                    ...feature.properties,
+                    originalId: feature.properties.id // Store original ID for updating
+                }
+            };
+            
+            // Add to draw layer for editing
+            this.draw.add(editableFeature);
+            
+            // Switch to select mode so user can immediately edit
+            this.draw.changeMode('simple_select');
+            
+            // Show visual feedback that feature is now editable
+            this.showEditingFeedback();
+            
+            // Update delete button state
+            this.updateDeleteButtonState();
+            
+            console.log('Feature made editable:', editableFeature);
+            
+        } catch (error) {
+            console.error('Error making feature editable:', error);
+        }
+    }
+
+    highlightFeature(feature) {
+        // Remove previous highlight
+        if (this.map.getSource('selected-feature')) {
+            this.map.removeLayer('selected-feature-highlight');
+            this.map.removeSource('selected-feature');
+        }
+
+        // Add highlight source and layer
+        this.map.addSource('selected-feature', {
+            type: 'geojson',
+            data: {
+                type: 'Feature',
+                geometry: feature.geometry,
+                properties: feature.properties
+            }
+        });
+
+        // Add different highlight styles based on geometry type
+        const geometryType = feature.geometry.type;
+        
+        if (geometryType === 'Point') {
+            this.map.addLayer({
+                id: 'selected-feature-highlight',
+                type: 'circle',
+                source: 'selected-feature',
+                paint: {
+                    'circle-color': 'transparent',
+                    'circle-stroke-color': '#ff6b35',
+                    'circle-stroke-width': 4,
+                    'circle-radius': 15
+                }
+            });
+        } else if (geometryType === 'LineString') {
+            this.map.addLayer({
+                id: 'selected-feature-highlight',
+                type: 'line',
+                source: 'selected-feature',
+                paint: {
+                    'line-color': '#ff6b35',
+                    'line-width': 6,
+                    'line-opacity': 0.8
+                }
+            });
+        } else if (geometryType === 'Polygon') {
+            this.map.addLayer({
+                id: 'selected-feature-highlight',
+                type: 'line',
+                source: 'selected-feature',
+                paint: {
+                    'line-color': '#ff6b35',
+                    'line-width': 4,
+                    'line-opacity': 1
+                }
+            });
+        }
+    }
+
+    handleMapClick(e) {
+        // Only handle general map clicks when not clicking on features
+        const features = this.map.queryRenderedFeatures(e.point);
+        const hasFeatureLayer = features.some(f => f.source === 'features');
+        
+        if (!hasFeatureLayer) {
+            this.selectedFeature = null;
+            this.hideFeatureInfo();
+            this.clearHighlight();
+        }
+    }
+
+    clearHighlight() {
+        if (this.map.getSource('selected-feature')) {
+            this.map.removeLayer('selected-feature-highlight');
+            this.map.removeSource('selected-feature');
+        }
+    }
+
+    showEditingFeedback() {
+        // Show a temporary message that the feature is now editable
+        const feedback = document.createElement('div');
+        feedback.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 124, 186, 0.9);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 5px;
+            font-weight: bold;
+            z-index: 10000;
+            pointer-events: none;
+        `;
+        feedback.textContent = '✏️ Feature is now editable! Drag vertices to modify.';
+        document.body.appendChild(feedback);
+        
+        // Remove after 3 seconds
+        setTimeout(() => {
+            if (feedback.parentNode) {
+                feedback.parentNode.removeChild(feedback);
+            }
+        }, 3000);
+    }
+
+    handleFeatureCreate(e) {
+        const feature = e.features[0];
+        console.log('New feature created:', feature);
+        
+        // Convert the draw feature to our feature format
+        const newFeature = {
+            type: 'Feature',
+            geometry: feature.geometry,
+            properties: {
+                name: '',
+                description: '',
+                id: null // Will be set when saved to server
+            }
+        };
+        
+        this.selectedFeature = newFeature;
+        this.showFeatureInfo(newFeature);
+        
+        // Auto-save the new feature to server
+        this.autoSaveDrawnFeature(newFeature, feature.id);
+    }
+
+    async autoSaveDrawnFeature(feature, drawId) {
+        const featureData = {
+            name: feature.properties.name || 'New Feature',
+            description: feature.properties.description || '',
+            geometry: feature.geometry,
+            properties: feature.properties
+        };
+
+        try {
+            const response = await fetch('/api/features', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(featureData)
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log('Feature auto-saved:', result);
+                
+                // Update the feature with the server ID
+                feature.properties.id = result.id;
+                this.selectedFeature.properties.id = result.id;
+                
+                // Remove from draw and reload features
+                this.draw.delete(drawId);
+                await this.loadFeatures();
+                
+            } else {
+                console.error('Failed to auto-save feature');
+            }
+        } catch (error) {
+            console.error('Error auto-saving feature:', error);
+        }
+    }
+
+    handleFeatureUpdate(e) {
+        const feature = e.features[0];
+        console.log('Feature updated:', feature);
+        
+        // Check if this is an existing feature being modified
+        const originalId = feature.properties.originalId;
+        
+        if (originalId) {
+            // Update existing feature
+            this.updateExistingFeature(originalId, feature);
+        } else {
+            // New feature being modified
+            this.autoSaveModifiedFeature(feature);
+        }
+    }
+
+    async updateExistingFeature(featureId, updatedFeature) {
+        const featureData = {
+            name: updatedFeature.properties.name || '',
+            description: updatedFeature.properties.description || '',
+            geometry: updatedFeature.geometry,
+            properties: updatedFeature.properties,
+            building_number: updatedFeature.properties.building_number || '',
+            building_type: updatedFeature.properties.building_type || '',
+            icon: updatedFeature.properties.icon || '',
+            osm_id: updatedFeature.properties.osm_id || null,
+            road_type: updatedFeature.properties.road_type || '',
+            direction: updatedFeature.properties.direction || '',
+            lane_count: updatedFeature.properties.lane_count || null,
+            max_speed: updatedFeature.properties.max_speed || null,
+            surface: updatedFeature.properties.surface || ''
+        };
+
+        try {
+            const response = await fetch(`/api/features/${featureId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(featureData)
+            });
+
+            if (response.ok) {
+                console.log('Feature updated successfully');
+                // Reload features to show the updated geometry
+                await this.loadFeatures();
+                // Clear the draw layer since the feature is now updated
+                this.draw.deleteAll();
+            } else {
+                const errorText = await response.text();
+                console.error('Failed to update feature:', response.status, errorText);
+            }
+        } catch (error) {
+            console.error('Error updating feature:', error);
+        }
+    }
+
+    handleFeatureDelete(e) {
+        e.features.forEach(feature => {
+            const featureId = feature.properties.id || feature.properties.originalId;
+            if (featureId) {
+                this.deleteFeatureFromServer(featureId);
+            }
+        });
+    }
+
+    async loadFeatures() {
+        try {
+            const response = await fetch('/api/features');
+            
+            if (response.ok) {
+                const geoJsonData = await response.json();
+                
+                // Add features source if it doesn't exist
+                if (!this.map.getSource('features')) {
+                    this.map.addSource('features', {
+                        type: 'geojson',
+                        data: geoJsonData
+                    });
+                    
+                    this.addFeatureLayers();
+                    
+                    // Add click handlers for feature interaction
+                    this.addLayerClickHandlers();
+                } else {
+                    // Update existing source
+                    this.map.getSource('features').setData(geoJsonData);
+                }
+                
+                // Store features in memory
+                this.features.clear();
+                geoJsonData.features.forEach(feature => {
+                    this.features.set(feature.id, feature);
+                });
+                
+                console.log(`Loaded ${geoJsonData.features.length} features`);
+            } else {
+                console.error('Failed to load features');
+            }
+        } catch (error) {
+            console.error('Error loading features:', error);
+        }
+    }
+
+    addFeatureLayers() {
+        // Add building polygons
+        this.map.addLayer({
+            id: 'buildings',
+            type: 'fill',
+            source: 'features',
+            filter: ['==', ['geometry-type'], 'Polygon'],
+            paint: {
+                'fill-color': [
+                    'case',
+                    ['has', 'building_type'],
+                    [
+                        'match',
+                        ['get', 'building_type'],
+                        'residential', '#4a90e2',
+                        'commercial', '#f5a623', 
+                        'industrial', '#bd10e0',
+                        'office', '#50e3c2',
+                        '#7ed321'
+                    ],
+                    '#007cba'
+                ],
+                'fill-opacity': 0.3
+            }
+        });
+
+        // Add building outlines
+        this.map.addLayer({
+            id: 'buildings-outline',
+            type: 'line',
+            source: 'features',
+            filter: ['==', ['geometry-type'], 'Polygon'],
+            paint: {
+                'line-color': '#007cba',
+                'line-width': 2
+            }
+        });
+
+        // Add roads - simplified filter for debugging
+        this.map.addLayer({
+            id: 'roads',
+            type: 'line',
+            source: 'features',
+            filter: ['all', 
+                ['==', ['geometry-type'], 'LineString'],
+                ['has', 'road_type']
+            ],
+            paint: {
+                'line-color': [
+                    'case',
+                    ['has', 'road_type'],
+                    [
+                        'match',
+                        ['get', 'road_type'],
+                        'motorway', '#e892a2',
+                        'trunk', '#f9b29c',
+                        'primary', '#fcd6a4',
+                        'secondary', '#f7fabf',
+                        'tertiary', '#ffffff',
+                        'residential', '#e8e8e8',
+                        'service', '#cccccc',
+                        'footway', '#fa8072',
+                        'path', '#fa8072',
+                        'cycleway', '#fa8072',
+                        'steps', '#fe9a76',
+                        '#999999'
+                    ],
+                    '#ff0000' // bright red for debugging - should not appear
+                ],
+                'line-width': [
+                    'case',
+                    ['has', 'road_type'],
+                    [
+                        'match',
+                        ['get', 'road_type'],
+                        'motorway', 8,
+                        'trunk', 7,
+                        'primary', 6,
+                        'secondary', 5,
+                        'tertiary', 4,
+                        'residential', 3,
+                        'service', 2,
+                        'footway', 2,
+                        'path', 2,
+                        'cycleway', 2,
+                        'steps', 2,
+                        3
+                    ],
+                    4 // default width
+                ]
+            }
+        });
+
+        // Add street lights with symbols
+        this.map.addLayer({
+            id: 'streetlights-bg',
+            type: 'circle',
+            source: 'features',
+            filter: ['all',
+                ['==', ['geometry-type'], 'Point'],
+                ['==', ['get', 'feature_type'], 'streetlight']
+            ],
+            paint: {
+                'circle-color': '#ffff00',
+                'circle-radius': 10,
+                'circle-stroke-color': '#ff8c00',
+                'circle-stroke-width': 2,
+                'circle-opacity': 0.8
+            }
+        });
+
+        // Add street light text symbols
+        this.map.addLayer({
+            id: 'streetlights',
+            type: 'symbol',
+            source: 'features',
+            filter: ['all',
+                ['==', ['geometry-type'], 'Point'],
+                ['==', ['get', 'feature_type'], 'streetlight']
+            ],
+            layout: {
+                'text-field': '💡',
+                'text-size': 14,
+                'text-allow-overlap': true,
+                'text-ignore-placement': true
+            },
+            paint: {
+                'text-color': '#000000'
+            }
+        });
+
+        // Add traffic lights with symbols
+        this.map.addLayer({
+            id: 'traffic-lights-bg',
+            type: 'circle',
+            source: 'features',
+            filter: ['all',
+                ['==', ['geometry-type'], 'Point'],
+                ['==', ['get', 'feature_type'], 'traffic_light']
+            ],
+            paint: {
+                'circle-color': '#ff0000',
+                'circle-radius': 12,
+                'circle-stroke-color': '#8B0000',
+                'circle-stroke-width': 3,
+                'circle-opacity': 0.8
+            }
+        });
+
+        // Add traffic light text symbols
+        this.map.addLayer({
+            id: 'traffic-lights',
+            type: 'symbol',
+            source: 'features',
+            filter: ['all',
+                ['==', ['geometry-type'], 'Point'],
+                ['==', ['get', 'feature_type'], 'traffic_light']
+            ],
+            layout: {
+                'text-field': '🚦',
+                'text-size': 16,
+                'text-allow-overlap': true,
+                'text-ignore-placement': true
+            },
+            paint: {
+                'text-color': '#000000'
+            }
+        });
+
+        // Add other points
+        this.map.addLayer({
+            id: 'points',
+            type: 'circle',
+            source: 'features',
+            filter: ['all',
+                ['==', ['geometry-type'], 'Point'],
+                ['!has', 'feature_type']
+            ],
+            paint: {
+                'circle-color': '#007cba',
+                'circle-radius': 6,
+                'circle-stroke-color': '#ffffff',
+                'circle-stroke-width': 2
+            }
+        });
+
+        // Add debug layer for all LineStrings
+        this.map.addLayer({
+            id: 'debug-all-lines',
+            type: 'line',
+            source: 'features',
+            filter: ['==', ['geometry-type'], 'LineString'],
+            paint: {
+                'line-color': '#00ff00', // bright green for debugging
+                'line-width': 2,
+                'line-opacity': 0.5
+            }
+        });
+
+        // Add other lines
+        this.map.addLayer({
+            id: 'lines',
+            type: 'line',
+            source: 'features',
+            filter: ['all',
+                ['==', ['geometry-type'], 'LineString'],
+                ['!has', 'road_type']
+            ],
+            paint: {
+                'line-color': '#007cba',
+                'line-width': 3
+            }
+        });
+    }
+
+    updateFeatureVisibility() {
+        const zoom = this.map.getZoom();
+        
+        // Update layer visibility based on zoom
+        const layerVisibility = {
+            'roads': zoom >= 10,
+            'debug-all-lines': zoom >= 8, // Show debug lines early
+            'buildings': zoom >= 15,
+            'buildings-outline': zoom >= 15,
+            'streetlights': zoom >= 16,
+            'streetlights-bg': zoom >= 16,
+            'traffic-lights': zoom >= 14,
+            'traffic-lights-bg': zoom >= 14,
+            'points': zoom >= 13,
+            'lines': zoom >= 13
+        };
+
+        Object.entries(layerVisibility).forEach(([layerId, visible]) => {
+            if (this.map.getLayer(layerId)) {
+                this.map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none');
+            }
+        });
+    }
+
     showFeatureInfo(feature) {
-        const properties = feature.get('properties') || {};
-        document.getElementById('feature-name').value = properties.name || feature.get('name') || '';
-        document.getElementById('feature-description').value = properties.description || feature.get('description') || '';
-        document.getElementById('building-number').value = properties.building_number || feature.get('building_number') || '';
-        document.getElementById('building-type').value = properties.building_type || feature.get('building_type') || '';
-        document.getElementById('building-icon').value = properties.icon || feature.get('icon') || '';
+        const properties = feature.properties || {};
+        document.getElementById('feature-name').value = properties.name || '';
+        document.getElementById('feature-description').value = properties.description || '';
+        document.getElementById('building-number').value = properties.building_number || '';
+        document.getElementById('building-type').value = properties.building_type || '';
+        document.getElementById('building-icon').value = properties.icon || '';
         document.getElementById('feature-info').style.display = 'block';
+        
+        // Update delete button state
+        this.updateDeleteButtonState();
+    }
+
+    updateDeleteButtonState() {
+        const deleteButton = document.getElementById('delete');
+        const hasSelectedFeature = this.selectedFeature || this.draw.getAll().features.length > 0;
+        
+        if (this.editingEnabled && hasSelectedFeature) {
+            deleteButton.style.backgroundColor = '#dc3545';
+            deleteButton.style.opacity = '1';
+            deleteButton.textContent = '🗑️ Delete Selected';
+        } else if (this.editingEnabled) {
+            deleteButton.style.backgroundColor = '#6c757d';
+            deleteButton.style.opacity = '0.7';
+            deleteButton.textContent = 'Delete';
+        } else {
+            deleteButton.style.backgroundColor = '#6c757d';
+            deleteButton.style.opacity = '0.5';
+            deleteButton.textContent = 'Delete';
+        }
     }
 
     hideFeatureInfo() {
         document.getElementById('feature-info').style.display = 'none';
+        this.clearHighlight();
         this.selectedFeature = null;
+        this.updateDeleteButtonState();
     }
 
     deleteSelectedFeature() {
-        if (this.selectedFeature) {
-            const featureId = this.selectedFeature.get('id');
-            if (featureId) {
-                this.deleteFeatureFromServer(featureId);
+        if (!this.editingEnabled) {
+            alert('Please enable editing first by clicking the "🔒 Lock Editing" button');
+            return;
+        }
+
+        // Check if there's a feature being edited in draw mode
+        const drawFeatures = this.draw.getAll().features;
+        if (drawFeatures.length > 0) {
+            if (confirm('Are you sure you want to delete this feature?')) {
+                const drawFeature = drawFeatures[0];
+                const originalId = drawFeature.properties.originalId;
+                
+                if (originalId) {
+                    // Delete existing feature from server
+                    this.deleteFeatureFromServer(originalId);
+                    this.draw.deleteAll();
+                } else {
+                    // Delete new draw feature
+                    this.draw.delete(drawFeature.id);
+                }
+                
+                this.clearHighlight();
+                this.hideFeatureInfo();
+                this.selectedFeature = null;
             }
-            this.vectorSource.removeFeature(this.selectedFeature);
-            this.hideFeatureInfo();
+        } else if (this.selectedFeature) {
+            // Delete selected feature that's not in edit mode
+            if (confirm('Are you sure you want to delete this feature?')) {
+                const featureId = this.selectedFeature.properties.id;
+                
+                if (featureId) {
+                    this.deleteFeatureFromServer(featureId);
+                }
+                
+                this.clearHighlight();
+                this.hideFeatureInfo();
+                this.selectedFeature = null;
+            }
+        } else {
+            alert('Please select a feature to delete by clicking on it first.');
         }
     }
 
     clearAllFeatures() {
         if (confirm('Are you sure you want to clear all features?')) {
-            this.vectorSource.clear();
+            if (this.map.getSource('features')) {
+                this.map.getSource('features').setData({
+                    type: 'FeatureCollection',
+                    features: []
+                });
+            }
+            this.features.clear();
             this.hideFeatureInfo();
         }
     }
 
-    saveSelectedFeature() {
+    async saveSelectedFeature() {
         if (!this.selectedFeature) return;
 
         const name = document.getElementById('feature-name').value;
@@ -907,48 +1122,56 @@ class MapEditor {
         const buildingType = document.getElementById('building-type').value;
         const icon = document.getElementById('building-icon').value;
         
-        const properties = {
-            name: name,
-            description: description,
-            building_number: buildingNumber,
-            building_type: buildingType,
-            icon: icon,
-            ...this.selectedFeature.get('properties')
-        };
-        
-        this.selectedFeature.set('properties', properties);
-
-        const geometry = this.selectedFeature.getGeometry();
-        const geoJsonGeometry = new ol.format.GeoJSON().writeGeometry(geometry, {
-            dataProjection: 'EPSG:4326',
-            featureProjection: 'EPSG:3857'
-        });
-        
-        // Ensure geometry is an object, not a string
-        const geometryObj = typeof geoJsonGeometry === 'string' ? JSON.parse(geoJsonGeometry) : geoJsonGeometry;
-        
         const featureData = {
             name: name,
             description: description,
-            geometry: geometryObj,
-            properties: properties,
+            geometry: this.selectedFeature.geometry,
+            properties: {
+                name: name,
+                description: description,
+                building_number: buildingNumber,
+                building_type: buildingType,
+                icon: icon,
+                ...this.selectedFeature.properties
+            },
             building_number: buildingNumber,
             building_type: buildingType,
             icon: icon,
-            osm_id: this.selectedFeature.get('osm_id') || null
+            osm_id: this.selectedFeature.properties.osm_id || null
         };
 
-        console.log('Saving feature data:', featureData);
-
-        const featureId = this.selectedFeature.get('id');
+        const featureId = this.selectedFeature.properties.id;
         
         if (featureId) {
-            this.updateFeatureOnServer(featureId, featureData);
+            await this.updateFeatureOnServer(featureId, featureData);
         } else {
-            this.createFeatureOnServer(featureData);
+            await this.createFeatureOnServer(featureData);
         }
 
         this.hideFeatureInfo();
+    }
+
+    async autoSaveModifiedFeature(feature) {
+        const properties = feature.properties || {};
+        
+        const featureData = {
+            name: properties.name || '',
+            description: properties.description || '',
+            geometry: feature.geometry,
+            properties: properties,
+            building_number: properties.building_number || '',
+            building_type: properties.building_type || '',
+            icon: properties.icon || '',
+            osm_id: properties.osm_id || null
+        };
+
+        const featureId = properties.id;
+        
+        if (featureId) {
+            await this.updateFeatureOnServer(featureId, featureData);
+        } else {
+            await this.createFeatureOnServer(featureData);
+        }
     }
 
     async createFeatureOnServer(featureData) {
@@ -963,12 +1186,12 @@ class MapEditor {
 
             if (response.ok) {
                 const result = await response.json();
-                this.selectedFeature.set('id', result.id);
                 console.log('Feature created successfully:', result);
+                // Reload features to update the map
+                await this.loadFeatures();
             } else {
                 const errorText = await response.text();
                 console.error('Failed to create feature:', response.status, errorText);
-                alert(`Failed to create feature: ${response.status} - ${errorText}`);
             }
         } catch (error) {
             console.error('Error creating feature:', error);
@@ -991,7 +1214,6 @@ class MapEditor {
             } else {
                 const errorText = await response.text();
                 console.error('Failed to update feature:', response.status, errorText);
-                alert(`Failed to update feature: ${response.status} - ${errorText}`);
             }
         } catch (error) {
             console.error('Error updating feature:', error);
@@ -1006,6 +1228,7 @@ class MapEditor {
 
             if (response.ok) {
                 console.log('Feature deleted successfully');
+                await this.loadFeatures();
             } else {
                 console.error('Failed to delete feature');
             }
@@ -1014,94 +1237,24 @@ class MapEditor {
         }
     }
 
-    async loadFeatures() {
-        try {
-            const response = await fetch('/api/features');
-            
-            if (response.ok) {
-                const geoJsonData = await response.json();
-                const format = new ol.format.GeoJSON();
-                
-                this.vectorSource.clear();
-                
-                geoJsonData.features.forEach(feature => {
-                    const olFeature = format.readFeature(feature, {
-                        featureProjection: 'EPSG:3857'
-                    });
-                    olFeature.set('id', feature.id);
-                    olFeature.set('properties', feature.properties);
-                    
-                    // Set feature-specific properties
-                    olFeature.set('name', feature.properties.name || '');
-                    olFeature.set('description', feature.properties.description || '');
-                    olFeature.set('building_number', feature.properties.building_number || '');
-                    olFeature.set('building_type', feature.properties.building_type || '');
-                    olFeature.set('icon', feature.properties.icon || '');
-                    olFeature.set('osm_id', feature.properties.osm_id || '');
-                    // Set road-specific properties
-                    olFeature.set('road_type', feature.properties.road_type || '');
-                    olFeature.set('direction', feature.properties.direction || '');
-                    olFeature.set('lane_count', feature.properties.lane_count || null);
-                    olFeature.set('max_speed', feature.properties.max_speed || null);
-                    olFeature.set('surface', feature.properties.surface || '');
-                    
-                    this.vectorSource.addFeature(olFeature);
-                });
-                
-                if (geoJsonData.features.length > 0) {
-                    const extent = this.vectorSource.getExtent();
-                    this.map.getView().fit(extent, { padding: [20, 20, 20, 20] });
-                }
-                
-                console.log(`Loaded ${geoJsonData.features.length} features`);
-            } else {
-                console.error('Failed to load features');
-            }
-        } catch (error) {
-            console.error('Error loading features:', error);
-        }
-    }
-
     async saveAllFeatures() {
-        const features = this.vectorSource.getFeatures();
+        const features = Array.from(this.features.values());
         let savedCount = 0;
         
         for (const feature of features) {
-            const featureId = feature.get('id');
-            const properties = feature.get('properties') || {};
-            
-            const geometry = feature.getGeometry();
-            const geoJsonGeometry = new ol.format.GeoJSON().writeGeometry(geometry, {
-                dataProjection: 'EPSG:4326',
-                featureProjection: 'EPSG:3857'
-            });
-            
-            // Ensure geometry is an object, not a string
-            const geometryObj = typeof geoJsonGeometry === 'string' ? JSON.parse(geoJsonGeometry) : geoJsonGeometry;
-            
-            const featureData = {
-                name: properties.name || '',
-                description: properties.description || '',
-                geometry: geometryObj,
-                properties: properties
-            };
-
             try {
+                const featureId = feature.id;
+                const featureData = {
+                    name: feature.properties.name || '',
+                    description: feature.properties.description || '',
+                    geometry: feature.geometry,
+                    properties: feature.properties
+                };
+
                 if (featureId) {
                     await this.updateFeatureOnServer(featureId, featureData);
                 } else {
-                    const response = await fetch('/api/features', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(featureData)
-                    });
-
-                    if (response.ok) {
-                        const result = await response.json();
-                        feature.set('id', result.id);
-                    }
+                    await this.createFeatureOnServer(featureData);
                 }
                 savedCount++;
             } catch (error) {
@@ -1113,15 +1266,12 @@ class MapEditor {
     }
 
     async loadOSMBuildings() {
-        const view = this.map.getView();
-        const extent = view.calculateExtent(this.map.getSize());
-        const [minX, minY, maxX, maxY] = ol.proj.transformExtent(extent, 'EPSG:3857', 'EPSG:4326');
-        
-        const bounds = {
-            west: minX,
-            south: minY,
-            east: maxX,
-            north: maxY
+        const bounds = this.map.getBounds();
+        const boundsObj = {
+            west: bounds.getWest(),
+            south: bounds.getSouth(),
+            east: bounds.getEast(),
+            north: bounds.getNorth()
         };
 
         const button = document.getElementById('load-buildings');
@@ -1135,15 +1285,13 @@ class MapEditor {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(bounds)
+                body: JSON.stringify(boundsObj)
             });
 
             if (response.ok) {
                 const result = await response.json();
                 console.log('OSM buildings loaded:', result);
                 alert(`Loaded ${result.buildings_loaded} buildings from OpenStreetMap`);
-                
-                // Reload features to show the new buildings
                 await this.loadFeatures();
             } else {
                 const errorText = await response.text();
@@ -1160,15 +1308,12 @@ class MapEditor {
     }
 
     async loadOSMRoads() {
-        const view = this.map.getView();
-        const extent = view.calculateExtent(this.map.getSize());
-        const [minX, minY, maxX, maxY] = ol.proj.transformExtent(extent, 'EPSG:3857', 'EPSG:4326');
-        
-        const bounds = {
-            west: minX,
-            south: minY,
-            east: maxX,
-            north: maxY
+        const bounds = this.map.getBounds();
+        const boundsObj = {
+            west: bounds.getWest(),
+            south: bounds.getSouth(),
+            east: bounds.getEast(),
+            north: bounds.getNorth()
         };
 
         const button = document.getElementById('load-roads');
@@ -1182,15 +1327,13 @@ class MapEditor {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(bounds)
+                body: JSON.stringify(boundsObj)
             });
 
             if (response.ok) {
                 const result = await response.json();
                 console.log('OSM roads loaded:', result);
                 alert(`Loaded ${result.roads_loaded} roads from OpenStreetMap`);
-                
-                // Reload features to show the new roads
                 await this.loadFeatures();
             } else {
                 const errorText = await response.text();
@@ -1207,15 +1350,12 @@ class MapEditor {
     }
 
     async loadOSMStreetlights() {
-        const view = this.map.getView();
-        const extent = view.calculateExtent(this.map.getSize());
-        const [minX, minY, maxX, maxY] = ol.proj.transformExtent(extent, 'EPSG:3857', 'EPSG:4326');
-        
-        const bounds = {
-            west: minX,
-            south: minY,
-            east: maxX,
-            north: maxY
+        const bounds = this.map.getBounds();
+        const boundsObj = {
+            west: bounds.getWest(),
+            south: bounds.getSouth(),
+            east: bounds.getEast(),
+            north: bounds.getNorth()
         };
 
         const button = document.getElementById('load-streetlights');
@@ -1229,15 +1369,13 @@ class MapEditor {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(bounds)
+                body: JSON.stringify(boundsObj)
             });
 
             if (response.ok) {
                 const result = await response.json();
                 console.log('OSM street lights loaded:', result);
                 alert(`Loaded ${result.streetlights_loaded} street lights from OpenStreetMap`);
-                
-                // Reload features to show the new street lights
                 await this.loadFeatures();
             } else {
                 const errorText = await response.text();
@@ -1254,15 +1392,12 @@ class MapEditor {
     }
 
     async loadOSMTrafficLights() {
-        const view = this.map.getView();
-        const extent = view.calculateExtent(this.map.getSize());
-        const [minX, minY, maxX, maxY] = ol.proj.transformExtent(extent, 'EPSG:3857', 'EPSG:4326');
-        
-        const bounds = {
-            west: minX,
-            south: minY,
-            east: maxX,
-            north: maxY
+        const bounds = this.map.getBounds();
+        const boundsObj = {
+            west: bounds.getWest(),
+            south: bounds.getSouth(),
+            east: bounds.getEast(),
+            north: bounds.getNorth()
         };
 
         const button = document.getElementById('load-traffic-lights');
@@ -1276,15 +1411,13 @@ class MapEditor {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(bounds)
+                body: JSON.stringify(boundsObj)
             });
 
             if (response.ok) {
                 const result = await response.json();
                 console.log('OSM traffic lights loaded:', result);
                 alert(`Loaded ${result.traffic_lights_loaded} traffic lights from OpenStreetMap`);
-                
-                // Reload features to show the new traffic lights
                 await this.loadFeatures();
             } else {
                 const errorText = await response.text();
