@@ -237,16 +237,35 @@ async def load_osm_buildings(
         out geom;
         """
         
-        # Query Overpass API
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                "https://overpass-api.de/api/interpreter",
-                data=overpass_query,
-                headers={"Content-Type": "text/plain"}
-            )
-            
-        if response.status_code != 200:
-            raise HTTPException(status_code=400, detail="Failed to fetch OSM data")
+        # Try multiple Overpass API servers
+        overpass_urls = [
+            "https://overpass-api.de/api/interpreter",
+            "https://overpass.kumi.systems/api/interpreter",
+            "https://overpass.openstreetmap.ru/api/interpreter"
+        ]
+        
+        response = None
+        last_error = None
+        
+        for url in overpass_urls:
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        url,
+                        data=overpass_query,
+                        headers={"Content-Type": "text/plain"}
+                    )
+                    if response.status_code == 200:
+                        break
+            except Exception as e:
+                last_error = str(e)
+                continue
+        
+        if not response or response.status_code != 200:
+            error_msg = f"Failed to fetch OSM data from all servers"
+            if last_error:
+                error_msg += f". Last error: {last_error}"
+            raise HTTPException(status_code=400, detail=error_msg)
             
         osm_data = response.json()
         buildings_loaded = 0

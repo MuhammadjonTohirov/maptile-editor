@@ -26,6 +26,10 @@ services:
       - db
     volumes:
       - ./backend:/app
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 1.1.1.1
     restart: unless-stopped
 
   tileserver:
