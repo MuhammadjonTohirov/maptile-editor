@@ -86,6 +86,18 @@ async def get_features(db: AsyncSession = Depends(get_db)):
     
     return GeoJSONFeatureCollection(features=geojson_features)
 
+@app.delete("/features/clear-all")
+async def clear_all_features(db: AsyncSession = Depends(get_db)):
+    """Delete all features from the database"""
+    try:
+        result = await db.execute(delete(Feature))
+        await db.commit()
+        
+        return {"message": "All features cleared successfully"}
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error clearing features: {str(e)}")
+
 @app.get("/features/{feature_id}", response_model=GeoJSONFeature)
 async def get_feature(feature_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(

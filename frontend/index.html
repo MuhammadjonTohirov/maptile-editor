@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Map Editor</title>
-    <link href="https://unpkg.com/maplibre-gl@4.0.2/dist/maplibre-gl.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@9.0.0/ol.css" type="text/css" />
     <style>
         body {
             margin: 0;
@@ -172,9 +172,20 @@
         </div>
     </div>
 
-    <script src="https://unpkg.com/maplibre-gl@4.0.2/dist/maplibre-gl.js"></script>
-    <script src="https://unpkg.com/@mapbox/mapbox-gl-draw@1.4.3/dist/mapbox-gl-draw.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/@mapbox/mapbox-gl-draw@1.4.3/dist/mapbox-gl-draw.css" type="text/css" />
-    <script src="js/map-editor.js"></script>
+    <!-- External Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/ol@9.0.0/dist/ol.js"></script>
+    
+    <!-- Shared Utilities -->
+    <script src="js/utils/constants.js"></script>
+    <script src="js/utils/api-service.js"></script>
+    <script src="js/utils/feature-styles.js"></script>
+    <script src="js/utils/geometry-utils.js"></script>
+    
+    <!-- Editor Modules -->
+    <script src="js/editor/map-core.js"></script>
+    <script src="js/editor/drawing-tools.js"></script>
+    <script src="js/editor/feature-manager.js"></script>
+    <script src="js/editor/controls.js"></script>
+    <script src="js/editor/map-editor-main.js"></script>
 </body>
 </html>
