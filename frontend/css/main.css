@@ -1,0 +1,342 @@
+/**
+ * Main Stylesheet for Map Editor
+ * Production-ready CSS separated from HTML
+ */
+
+/* Reset and Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    display: flex;
+    background-color: #f5f5f5;
+    color: #333;
+}
+
+/* Sidebar Styles */
+.sidebar {
+    width: 300px;
+    height: 100vh;
+    background: #2c3e50;
+    color: white;
+    overflow-y: auto;
+    z-index: 1000;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+    border-right: 1px solid #34495e;
+}
+
+.sidebar-header {
+    padding: 20px;
+    background: #34495e;
+    border-bottom: 1px solid #4a6084;
+    text-align: center;
+}
+
+.sidebar-header h1 {
+    margin: 0;
+    font-size: 18px;
+    color: #ecf0f1;
+    font-weight: 600;
+}
+
+/* Map Container */
+#map {
+    flex: 1;
+    height: 100vh;
+    position: relative;
+}
+
+/* Control Sections */
+.control-section {
+    border-bottom: 1px solid #4a6084;
+}
+
+.section-header {
+    padding: 15px 20px;
+    background: #34495e;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
+    font-size: 14px;
+    transition: background-color 0.2s ease;
+}
+
+.section-header:hover {
+    background: #3c5a7a;
+}
+
+.section-content {
+    padding: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.section-content.expanded {
+    max-height: 500px;
+    padding: 10px 0;
+}
+
+.control-group {
+    padding: 10px 20px;
+}
+
+.control-group label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: 500;
+    color: #bdc3c7;
+    font-size: 14px;
+}
+
+/* Button Styles */
+button {
+    width: 100%;
+    margin: 5px 0;
+    padding: 12px 15px;
+    border: none;
+    border-radius: 6px;
+    background: #3498db;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+button:hover {
+    background: #2980b9;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+button:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+button:disabled {
+    background: #7f8c8d;
+    cursor: not-allowed;
+    transform: none;
+}
+
+button.active {
+    background: #e74c3c;
+    box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.3);
+}
+
+.toggle-button {
+    background: #e74c3c !important;
+    font-weight: bold;
+}
+
+.toggle-button.editing-enabled {
+    background: #27ae60 !important;
+}
+
+.btn-success {
+    background: #27ae60;
+}
+
+.btn-success:hover {
+    background: #219a52;
+}
+
+.btn-warning {
+    background: #f39c12;
+}
+
+.btn-warning:hover {
+    background: #d68910;
+}
+
+/* Polygon Category Styles */
+.polygon-category {
+    margin: 5px 0;
+    display: flex;
+    align-items: center;
+}
+
+.polygon-category input[type="checkbox"] {
+    width: auto;
+    margin-right: 8px;
+    cursor: pointer;
+}
+
+.polygon-category label {
+    margin: 0;
+    font-weight: normal;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    flex: 1;
+}
+
+/* Expand Icon */
+.expand-icon {
+    font-size: 12px;
+    transition: transform 0.3s ease;
+}
+
+.expanded .expand-icon {
+    transform: rotate(90deg);
+}
+
+/* Feature Info Panel */
+.feature-info {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 300px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+    display: none;
+}
+
+.feature-info h4 {
+    margin-top: 0;
+    color: #2c3e50;
+    font-size: 16px;
+    margin-bottom: 15px;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 8px;
+}
+
+.feature-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.feature-form input,
+.feature-form textarea,
+.feature-form select {
+    padding: 10px;
+    border: 2px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+}
+
+.feature-form input:focus,
+.feature-form textarea:focus,
+.feature-form select:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.feature-form textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.feature-form button {
+    margin-top: 10px;
+    padding: 12px;
+    font-weight: 600;
+}
+
+/* Zoom Level Display */
+#zoom-level {
+    background: rgba(255,255,255,0.1);
+    padding: 10px;
+    border-radius: 6px;
+    margin-top: 10px;
+    text-align: center;
+    font-size: 14px;
+    color: #ecf0f1;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 250px;
+    }
+    
+    .feature-info {
+        width: 250px;
+        right: 10px;
+        top: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    body {
+        flex-direction: column;
+    }
+    
+    .sidebar {
+        width: 100%;
+        height: auto;
+        max-height: 40vh;
+    }
+    
+    #map {
+        height: 60vh;
+    }
+    
+    .feature-info {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 90%;
+        max-width: 400px;
+    }
+}
+
+/* Loading and Error States */
+.loading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.error {
+    color: #e74c3c;
+    background: #fdf2f2;
+    border: 1px solid #f5c6cb;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin: 8px 0;
+}
+
+.success {
+    color: #27ae60;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin: 8px 0;
+}
+
+/* Scrollbar Styling */
+.sidebar::-webkit-scrollbar {
+    width: 8px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+    background: #34495e;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    background: #5a6c7d;
+    border-radius: 4px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+    background: #6c7b8a;
+}

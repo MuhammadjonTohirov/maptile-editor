@@ -51,7 +51,40 @@ class MapClient {
     startAutoRefresh(intervalMs = 30000) {
         this.dataLoader.startAutoRefresh(intervalMs);
     }
+    
+    /**
+     * Update map styles when configuration changes
+     */
+    updateMapStyles(newStyles) {
+        console.log('🎨 CLIENT: Updating map styles, re-evaluating all features...');
+        
+        // Force refresh all feature styles AND visibility
+        const currentZoom = this.map.getView().getZoom();
+        this.vectorSource.getFeatures().forEach(feature => {
+            // Re-evaluate visibility
+            if (FEATURE_VISIBILITY.shouldShowFeature(feature, currentZoom)) {
+                feature.setStyle(FeatureStyles.getFeatureStyle(feature));
+            } else {
+                // Hide feature by setting null style
+                feature.setStyle(null);
+            }
+        });
+        
+        // Trigger map re-render
+        this.map.render();
+        console.log('🎨 CLIENT: Map styles updated and rendered');
+    }
 }
+
+// Global function to update styles from the styles window
+window.updateMapStyles = function(newStyles) {
+    if (window.mapClient) {
+        window.mapClient.updateMapStyles(newStyles);
+    }
+    if (window.mapEditor) {
+        window.mapEditor.updateMapStyles(newStyles);
+    }
+};
 
 // Initialize the vector client when page loads
 document.addEventListener('DOMContentLoaded', () => {

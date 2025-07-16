@@ -105,7 +105,6 @@ class MapCore {
             const coords = await GeometryUtils.getUserLocation();
             this.map.getView().setCenter(ol.proj.fromLonLat(coords));
             this.map.getView().setZoom(15);
-            console.log('Centered map on user location');
         } catch (error) {
             console.log('Geolocation error:', error.message);
         }

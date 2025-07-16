@@ -13,7 +13,22 @@
       "Bash(pip install:*)",
       "Bash(rm:*)",
       "Bash(grep:*)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(ls:*)",
+      "Bash(brew services:*)",
+      "Bash(sudo pkill:*)",
+      "Bash(pkill:*)",
+      "Bash(PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d mapdata -c \"\\dt\")",
+      "Bash(brew install:*)",
+      "Bash(PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d mapdata -c \"SELECT DISTINCT properties->>''feature_type'' as feature_type FROM features WHERE properties->>''feature_type'' IS NOT NULL;\")",
+      "Bash(PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d mapdata -c \"SELECT properties FROM features WHERE properties IS NOT NULL LIMIT 5;\")",
+      "Bash(PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d mapdata -c \"SELECT DISTINCT properties->>''feature_type'' as feature_type FROM features WHERE properties->>''feature_type'' IS NOT NULL UNION SELECT DISTINCT ''road'' FROM features WHERE properties->>''source'' = ''openstreetmap'' AND road_type IS NOT NULL UNION SELECT DISTINCT ''streetlight'' FROM features WHERE icon = ''💡'' UNION SELECT DISTINCT ''traffic_light'' FROM features WHERE icon = ''🚦'';\")",
+      "Bash(mv:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(python:*)",
+      "Bash(docker logs:*)"
     ],
     "deny": []
   }

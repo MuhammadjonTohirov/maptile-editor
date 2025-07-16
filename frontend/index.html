@@ -5,186 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Map Editor</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@9.0.0/ol.css" type="text/css" />
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: Arial, sans-serif;
-            display: flex;
-        }
-        
-        .sidebar {
-            width: 300px;
-            height: 100vh;
-            background: #2c3e50;
-            color: white;
-            overflow-y: auto;
-            z-index: 1000;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-        }
-        
-        .sidebar-header {
-            padding: 20px;
-            background: #34495e;
-            border-bottom: 1px solid #4a6084;
-        }
-        
-        .sidebar-header h1 {
-            margin: 0;
-            font-size: 18px;
-            color: #ecf0f1;
-        }
-        
-        #map {
-            flex: 1;
-            height: 100vh;
-        }
-        
-        .control-section {
-            border-bottom: 1px solid #4a6084;
-        }
-        
-        .section-header {
-            padding: 15px 20px;
-            background: #34495e;
-            cursor: pointer;
-            user-select: none;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-weight: bold;
-        }
-        
-        .section-header:hover {
-            background: #3c5a7a;
-        }
-        
-        .section-content {
-            padding: 0;
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s ease;
-        }
-        
-        .section-content.expanded {
-            max-height: 500px;
-            padding: 10px 0;
-        }
-        
-        .control-group {
-            padding: 10px 20px;
-        }
-        
-        .control-group label {
-            display: block;
-            margin-bottom: 10px;
-            font-weight: bold;
-            color: #bdc3c7;
-            font-size: 14px;
-        }
-        
-        button {
-            width: 100%;
-            margin: 5px 0;
-            padding: 12px 15px;
-            border: none;
-            border-radius: 6px;
-            background: #3498db;
-            color: white;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background 0.2s;
-        }
-        
-        button:hover {
-            background: #2980b9;
-        }
-        
-        button.active {
-            background: #e74c3c;
-        }
-        
-        .toggle-button {
-            background: #e74c3c !important;
-            font-weight: bold;
-        }
-        
-        .toggle-button.editing-enabled {
-            background: #27ae60 !important;
-        }
-        
-        .btn-success {
-            background: #27ae60;
-        }
-        
-        .btn-success:hover {
-            background: #219a52;
-        }
-        
-        .btn-warning {
-            background: #f39c12;
-        }
-        
-        .btn-warning:hover {
-            background: #d68910;
-        }
-        
-        .polygon-category {
-            margin: 5px 0;
-        }
-        
-        .polygon-category input[type="checkbox"] {
-            width: auto;
-            margin-right: 8px;
-        }
-        
-        .polygon-category label {
-            margin: 0;
-            font-weight: normal;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-        }
-        
-        .expand-icon {
-            font-size: 12px;
-            transition: transform 0.3s;
-        }
-        
-        .expanded .expand-icon {
-            transform: rotate(90deg);
-        }
-        
-        .feature-info {
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
-            z-index: 1000;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 10px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            max-width: 300px;
-            display: none;
-        }
-        
-        .feature-form {
-            margin-top: 10px;
-        }
-        
-        .feature-form input, .feature-form textarea {
-            width: 100%;
-            margin: 5px 0;
-            padding: 5px;
-            border: 1px solid #ccc;
-            border-radius: 3px;
-        }
-        
-        .feature-form textarea {
-            height: 60px;
-            resize: vertical;
-        }
-    </style>
+    <link rel="stylesheet" href="css/main.css" type="text/css" />
 </head>
 <body>
     <div class="sidebar">
@@ -224,54 +45,17 @@
             </div>
         </div>
         
-        <!-- Load OSM Polygons Section -->
+        <!-- Data Loading Section -->
         <div class="control-section">
-            <div class="section-header" onclick="toggleSection('osm-polygons')">
-                <span>🏗️ Load OSM Polygons</span>
+            <div class="section-header" onclick="toggleSection('data-loading')">
+                <span>🌍 Load OSM Data</span>
                 <span class="expand-icon">▶</span>
             </div>
-            <div class="section-content" id="osm-polygons">
+            <div class="section-content" id="data-loading">
                 <div class="control-group">
-                    <label>Select Polygon Types:</label>
-                    <div class="polygon-category">
-                        <label><input type="checkbox" id="load-buildings" checked> 🏢 Buildings</label>
-                    </div>
-                    <div class="polygon-category">
-                        <label><input type="checkbox" id="load-landuse" checked> 🌿 Land Use</label>
-                    </div>
-                    <div class="polygon-category">
-                        <label><input type="checkbox" id="load-natural" checked> 🌲 Natural Features</label>
-                    </div>
-                    <div class="polygon-category">
-                        <label><input type="checkbox" id="load-leisure" checked> ⚽ Leisure & Sports</label>
-                    </div>
-                    <div class="polygon-category">
-                        <label><input type="checkbox" id="load-amenity" checked> 🏥 Amenities</label>
-                    </div>
-                    <div class="polygon-category">
-                        <label><input type="checkbox" id="load-transportation" checked> ✈️ Transportation</label>
-                    </div>
-                    <div class="polygon-category">
-                        <label><input type="checkbox" id="load-water" checked> 💧 Water Features</label>
-                    </div>
-                    <div class="polygon-category">
-                        <label><input type="checkbox" id="load-utility" checked> ⚡ Utilities</label>
-                    </div>
-                    <button id="load-osm-polygons" class="btn-success">🔄 Load Selected Polygons</button>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Load OSM Roads Section -->
-        <div class="control-section">
-            <div class="section-header" onclick="toggleSection('osm-roads')">
-                <span>🛣️ Load OSM Roads</span>
-                <span class="expand-icon">▶</span>
-            </div>
-            <div class="section-content" id="osm-roads">
-                <div class="control-group">
+                    <button id="load-buildings">🏢 Load Buildings</button>
                     <button id="load-roads">🛣️ Load Roads</button>
-                    <button id="load-streetlights">💡 Load Street Lights</button>
+                    <button id="load-streetlights">💡 Load Streetlights</button>
                     <button id="load-traffic-lights">🚦 Load Traffic Lights</button>
                 </div>
             </div>
@@ -288,7 +72,7 @@
                     <button id="my-location">📍 My Location</button>
                     <button id="toggle-3d" class="toggle-button">🏢 Enable 3D</button>
                     <button id="open-styles" onclick="window.open('styles.html', '_blank')">🎨 Styles</button>
-                    <div id="zoom-level" style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 6px; margin-top: 10px; text-align: center;">
+                    <div id="zoom-level">
                         Zoom: <span id="current-zoom">2</span>
                     </div>
                 </div>
@@ -344,6 +128,9 @@
     <script src="js/utils/feature-styles.js"></script>
     <script src="js/utils/geometry-utils.js"></script>
     
+    <!-- UI Components -->
+    <script src="js/ui/sidebar.js"></script>
+    
     <!-- Editor Modules -->
     <script src="js/editor/map-core.js"></script>
     <script src="js/editor/drawing-tools.js"></script>
@@ -351,105 +138,8 @@
     <script src="js/editor/controls.js"></script>
     <script src="js/editor/map-editor-main.js"></script>
     
-    <!-- Sidebar functionality -->
-    <script>
-        // Toggle sidebar sections
-        function toggleSection(sectionId) {
-            const content = document.getElementById(sectionId);
-            const header = content.previousElementSibling;
-            const isExpanded = content.classList.contains('expanded');
-            
-            if (isExpanded) {
-                content.classList.remove('expanded');
-                header.classList.remove('expanded');
-            } else {
-                content.classList.add('expanded');
-                header.classList.add('expanded');
-            }
-        }
-        
-        // Auto-expand the first section
-        document.addEventListener('DOMContentLoaded', () => {
-            toggleSection('drawing-tools');
-        });
-        
-        // Load OSM Polygons functionality
-        document.getElementById('load-osm-polygons').addEventListener('click', async () => {
-            const button = document.getElementById('load-osm-polygons');
-            const originalText = button.textContent;
-            
-            try {
-                button.textContent = '⏳ Loading...';
-                button.disabled = true;
-                
-                // Get selected polygon types
-                const selectedTypes = [];
-                if (document.getElementById('load-buildings').checked) selectedTypes.push('building');
-                if (document.getElementById('load-landuse').checked) selectedTypes.push('landuse');
-                if (document.getElementById('load-natural').checked) selectedTypes.push('natural');
-                if (document.getElementById('load-leisure').checked) selectedTypes.push('leisure');
-                if (document.getElementById('load-amenity').checked) selectedTypes.push('amenity');
-                if (document.getElementById('load-transportation').checked) selectedTypes.push('transportation');
-                if (document.getElementById('load-water').checked) selectedTypes.push('water');
-                if (document.getElementById('load-utility').checked) selectedTypes.push('utility');
-                
-                if (selectedTypes.length === 0) {
-                    alert('Please select at least one polygon type');
-                    return;
-                }
-                
-                // Check if map editor is ready
-                if (!window.mapEditor || !window.mapEditor.map) {
-                    alert('❌ Map editor not ready yet. Please wait a moment and try again.');
-                    return;
-                }
-                
-                // Get current map bounds
-                const view = window.mapEditor.map.getView();
-                const extent = view.calculateExtent(window.mapEditor.map.getSize());
-                const bounds = {
-                    west: extent[0],
-                    south: extent[1],
-                    east: extent[2],
-                    north: extent[3]
-                };
-                
-                // Transform bounds to WGS84
-                const transformedBounds = ol.proj.transformExtent([bounds.west, bounds.south, bounds.east, bounds.north], 'EPSG:3857', 'EPSG:4326');
-                const wgs84Bounds = {
-                    west: transformedBounds[0],
-                    south: transformedBounds[1],  
-                    east: transformedBounds[2],
-                    north: transformedBounds[3]
-                };
-                
-                // Load polygons
-                const response = await fetch('/api/load-osm-polygons', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        bounds: wgs84Bounds,
-                        polygon_types: selectedTypes
-                    })
-                });
-                
-                const result = await response.json();
-                if (response.ok) {
-                    alert(`✅ Loaded ${result.polygons_loaded} polygon features!`);
-                    // Reload features to show new polygons
-                    document.getElementById('load-features').click();
-                } else {
-                    throw new Error(result.detail);
-                }
-                
-            } catch (error) {
-                console.error('Error loading OSM polygons:', error);
-                alert(`❌ Error loading polygons: ${error.message}`);
-            } finally {
-                button.textContent = originalText;
-                button.disabled = false;
-            }
-        });
-    </script>
+    <!-- Additional Features -->
+    <script src="js/editor/dynamic-feature-loader.js"></script>
+    <script src="js/utils/feature-cache.js"></script>
 </body>
 </html>

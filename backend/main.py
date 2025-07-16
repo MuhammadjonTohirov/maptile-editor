@@ -8,6 +8,7 @@ from shapely.geometry import shape
 import json
 import httpx
 from typing import List
+import logging
 
 from database import get_db
 from models import Feature
@@ -18,14 +19,26 @@ from schemas import (
     GeoJSONFeature, 
     GeoJSONFeatureCollection
 )
+from config import settings, get_cors_origins, is_production
 
-app = FastAPI(title="Map Editor API", version="1.0.0")
+# Configure logging
+logging.basicConfig(
+    level=getattr(logging, settings.log_level),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(
+    title="Map Editor API", 
+    version="1.0.0",
+    debug=settings.api_debug
+)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=get_cors_origins(),
+    allow_credentials=settings.cors_allow_credentials,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
@@ -255,19 +268,53 @@ async def delete_feature(feature_id: int, db: AsyncSession = Depends(get_db)):
         await db.rollback()
         raise HTTPException(status_code=400, detail=f"Error deleting feature: {str(e)}")
 
-@app.post("/load-osm-buildings")
-async def load_osm_buildings(
+@app.post("/load-osm-polygons")
+async def load_osm_polygons(
     bounds: dict,  # {"north": 40.7589, "south": 40.7489, "east": -73.9441, "west": -73.9641}
+    polygon_types: List[str] = None,  # Optional filter for polygon types
     db: AsyncSession = Depends(get_db)
 ):
-    """Load building data from OpenStreetMap for the given bounds"""
+    """Load all polygon data from OpenStreetMap for the given bounds"""
     try:
-        # Construct Overpass API query for buildings
+        # Construct comprehensive Overpass API query for all polygon types
         overpass_query = f"""
-        [out:json][timeout:25];
+        [out:json][timeout:60];
         (
+          // Buildings
           way["building"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
           relation["building"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          
+          // Land Use
+          way["landuse"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          relation["landuse"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          
+          // Natural Features
+          way["natural"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          relation["natural"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          
+          // Leisure & Recreation
+          way["leisure"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          relation["leisure"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          
+          // Amenities (parking, schools, hospitals)
+          way["amenity"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          relation["amenity"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          
+          // Transportation
+          way["aeroway"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          relation["aeroway"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          
+          // Water features
+          way["waterway"="riverbank"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          relation["waterway"="riverbank"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          
+          // Sports
+          way["sport"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          relation["sport"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          
+          // Power & Utilities
+          way["power"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
+          relation["power"]({bounds['south']},{bounds['west']},{bounds['north']},{bounds['east']});
         );
         out geom;
         """
@@ -284,11 +331,39 @@ async def load_osm_buildings(
             raise HTTPException(status_code=400, detail="Failed to fetch OSM data")
             
         osm_data = response.json()
-        buildings_loaded = 0
+        polygons_loaded = 0
         
-        # Process OSM buildings
+        # Define polygon categories for classification
+        def get_polygon_category(tags):
+            """Classify polygon based on OSM tags"""
+            if 'building' in tags:
+                return 'building'
+            elif 'landuse' in tags:
+                return 'landuse'
+            elif 'natural' in tags:
+                return 'natural'
+            elif 'leisure' in tags:
+                return 'leisure'
+            elif 'amenity' in tags:
+                return 'amenity'
+            elif 'aeroway' in tags:
+                return 'transportation'
+            elif 'waterway' in tags:
+                return 'water'
+            elif 'sport' in tags:
+                return 'sport'
+            elif 'power' in tags:
+                return 'utility'
+            return 'other'
+        
+        # Process OSM polygons
         for element in osm_data.get('elements', []):
-            if element.get('type') in ['way', 'relation'] and 'building' in element.get('tags', {}):
+            if element.get('type') in ['way', 'relation']:
+                tags = element.get('tags', {})
+                
+                # Skip if no relevant polygon tags
+                if not any(key in tags for key in ['building', 'landuse', 'natural', 'leisure', 'amenity', 'aeroway', 'waterway', 'sport', 'power']):
+                    continue
                 # Create geometry from OSM coordinates
                 if element['type'] == 'way' and 'geometry' in element:
                     coords = [[node['lon'], node['lat']] for node in element['geometry']]
@@ -302,45 +377,74 @@ async def load_osm_buildings(
                         "coordinates": [coords]
                     }
                     
-                    tags = element.get('tags', {})
-                    
-                    # Check if we already have this OSM building
+                    # Check if we already have this OSM feature
                     existing = await db.execute(
                         select(Feature).where(Feature.osm_id == str(element['id']))
                     )
                     if existing.scalar_one_or_none():
                         continue  # Skip if already exists
                     
+                    # Classify polygon type
+                    polygon_category = get_polygon_category(tags)
+                    
                     # Create feature from OSM data
                     geometry_shape = shape(geometry)
                     geometry_wkt = from_shape(geometry_shape, srid=4326)
                     
-                    building_feature = Feature(
-                        name=tags.get('name', ''),
-                        description=f"Building from OSM (ID: {element['id']})",
+                    # Generate appropriate name and description
+                    feature_name = tags.get('name', '')
+                    if not feature_name:
+                        # Generate name based on type
+                        if polygon_category == 'building':
+                            feature_name = f"{tags.get('building', 'Building')}"
+                        elif polygon_category == 'landuse':
+                            feature_name = f"{tags.get('landuse', 'Land Use').replace('_', ' ').title()}"
+                        elif polygon_category == 'natural':
+                            feature_name = f"{tags.get('natural', 'Natural').replace('_', ' ').title()}"
+                        elif polygon_category == 'leisure':
+                            feature_name = f"{tags.get('leisure', 'Leisure').replace('_', ' ').title()}"
+                        elif polygon_category == 'amenity':
+                            feature_name = f"{tags.get('amenity', 'Amenity').replace('_', ' ').title()}"
+                        else:
+                            feature_name = f"{polygon_category.title()}"
+                    
+                    polygon_feature = Feature(
+                        name=feature_name,
+                        description=f"{polygon_category.title()} from OSM (ID: {element['id']})",
                         geometry=geometry_wkt,
-                        building_number=tags.get('addr:housenumber', ''),
-                        building_type=tags.get('building', 'yes'),
+                        building_number=tags.get('addr:housenumber', '') if polygon_category == 'building' else '',
+                        building_type=tags.get('building', '') if polygon_category == 'building' else '',
                         osm_id=str(element['id']),
                         properties={
                             'osm_tags': tags,
-                            'source': 'openstreetmap'
+                            'source': 'openstreetmap',
+                            'polygon_category': polygon_category,
+                            'feature_type': polygon_category
                         }
                     )
                     
-                    db.add(building_feature)
-                    buildings_loaded += 1
+                    db.add(polygon_feature)
+                    polygons_loaded += 1
         
         await db.commit()
         
         return {
-            "message": f"Loaded {buildings_loaded} buildings from OpenStreetMap",
-            "buildings_loaded": buildings_loaded
+            "message": f"Loaded {polygons_loaded} polygon features from OpenStreetMap",
+            "polygons_loaded": polygons_loaded
         }
         
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=400, detail=f"Error loading OSM buildings: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Error loading OSM polygons: {str(e)}")
+
+# Keep the old buildings endpoint for backward compatibility
+@app.post("/load-osm-buildings")
+async def load_osm_buildings(
+    bounds: dict,
+    db: AsyncSession = Depends(get_db)
+):
+    """Load building data from OpenStreetMap (legacy endpoint)"""
+    return await load_osm_polygons(bounds, ["building"], db)
 
 @app.post("/load-osm-roads")
 async def load_osm_roads(
@@ -686,6 +790,157 @@ async def load_osm_traffic_lights(
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=400, detail=f"Error loading OSM traffic lights: {str(e)}")
+
+@app.post("/features/spatial")
+async def get_features_spatial(
+    bounds: dict,  # {\"north\": 40.7589, \"south\": 40.7489, \"east\": -73.9441, \"west\": -73.9641}
+    zoom: int = 15,
+    limit: int = 500,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get features within specific spatial bounds with zoom-based filtering"""
+    try:
+        from geoalchemy2.functions import ST_MakeEnvelope, ST_Intersects
+        
+        # Create spatial envelope from bounds
+        envelope = ST_MakeEnvelope(
+            bounds['west'], bounds['south'], 
+            bounds['east'], bounds['north'], 
+            4326  # SRID for WGS84
+        )
+        
+        # Build query with spatial filter
+        query = select(
+            Feature.id,
+            Feature.name,
+            Feature.description,
+            Feature.properties,
+            Feature.building_number,
+            Feature.building_type,
+            Feature.icon,
+            Feature.osm_id,
+            Feature.road_type,
+            Feature.direction,
+            Feature.lane_count,
+            Feature.max_speed,
+            Feature.surface,
+            ST_AsGeoJSON(Feature.geometry).label("geometry_json")
+        ).where(
+            ST_Intersects(Feature.geometry, envelope)
+        )
+        
+        # Add zoom-based filtering for performance
+        if zoom < 14:
+            # At low zoom, only show major features
+            query = query.where(
+                Feature.properties.op('->')('polygon_category').in_(['landuse', 'water', 'natural']) |
+                Feature.road_type.in_(['primary', 'secondary', 'trunk', 'motorway']) |
+                Feature.properties.op('->')('feature_type').in_(['building']) # Only if large
+            )
+        elif zoom < 16:
+            # Medium zoom: exclude minor features
+            query = query.where(
+                ~(Feature.road_type.in_(['footway', 'path', 'cycleway', 'steps']))
+            )
+        
+        # Apply limit and execute
+        query = query.limit(limit)
+        result = await db.execute(query)
+        features = result.fetchall()
+        
+        geojson_features = []
+        for feature in features:
+            geometry = json.loads(feature.geometry_json) if feature.geometry_json else None
+            properties = feature.properties or {}
+            
+            # Add all feature properties to the properties object
+            properties.update({
+                "name": feature.name,
+                "description": feature.description,
+                "building_number": feature.building_number,
+                "building_type": feature.building_type,
+                "icon": feature.icon,
+                "osm_id": feature.osm_id,
+                "road_type": feature.road_type,
+                "direction": feature.direction,
+                "lane_count": feature.lane_count,
+                "max_speed": feature.max_speed,
+                "surface": feature.surface
+            })
+            
+            # Remove None values to keep the JSON clean
+            properties = {k: v for k, v in properties.items() if v is not None}
+            
+            geojson_features.append(GeoJSONFeature(
+                id=feature.id,
+                geometry=geometry,
+                properties=properties
+            ))
+        
+        return {
+            "type": "FeatureCollection",
+            "features": geojson_features,
+            "bounds": bounds,
+            "zoom": zoom,
+            "count": len(geojson_features)
+        }
+        
+    except Exception as e:
+        # Fallback to non-spatial query if spatial functions fail
+        print(f"Spatial query failed, falling back: {e}")
+        result = await db.execute(
+            select(
+                Feature.id,
+                Feature.name,
+                Feature.description,
+                Feature.properties,
+                Feature.building_number,
+                Feature.building_type,
+                Feature.icon,
+                Feature.osm_id,
+                Feature.road_type,
+                Feature.direction,
+                Feature.lane_count,
+                Feature.max_speed,
+                Feature.surface,
+                ST_AsGeoJSON(Feature.geometry).label("geometry_json")
+            ).limit(limit)
+        )
+        features = result.fetchall()
+        
+        geojson_features = []
+        for feature in features:
+            geometry = json.loads(feature.geometry_json) if feature.geometry_json else None
+            properties = feature.properties or {}
+            properties.update({
+                "name": feature.name,
+                "description": feature.description,
+                "building_number": feature.building_number,
+                "building_type": feature.building_type,
+                "icon": feature.icon,
+                "osm_id": feature.osm_id,
+                "road_type": feature.road_type,
+                "direction": feature.direction,
+                "lane_count": feature.lane_count,
+                "max_speed": feature.max_speed,
+                "surface": feature.surface
+            })
+            properties = {k: v for k, v in properties.items() if v is not None}
+            
+            geojson_features.append(GeoJSONFeature(
+                id=feature.id,
+                geometry=geometry,
+                properties=properties
+            ))
+        
+        return {
+            "type": "FeatureCollection", 
+            "features": geojson_features,
+            "bounds": bounds,
+            "zoom": zoom,
+            "count": len(geojson_features),
+            "fallback": True
+        }
 
 @app.get("/health")
 async def health_check():
