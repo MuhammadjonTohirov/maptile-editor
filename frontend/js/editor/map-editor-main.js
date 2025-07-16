@@ -22,16 +22,24 @@ class MapEditor {
         this.mapCore.setEditor(this);
         this.drawingTools.setEditor(this);
         this.featureManager.setEditor(this);
+        this.controls.setEditor(this);
         
-        // Load existing features
+        // Load existing features using simple bulk loading
         this.featureManager.loadFeatures();
+        
+        // Refresh all feature styles to apply z-index ordering
+        setTimeout(() => {
+            this.refreshAllFeatureStyles();
+        }, 1000);
+        
+        console.log('🚀 Map editor initialized with simple feature loading');
         
         // Expose properties for backward compatibility
         this.map = this.mapCore.map;
         this.vectorSource = this.mapCore.vectorSource;
         this.vectorLayer = this.mapCore.vectorLayer;
         this.features = this.mapCore.features;
-        this.editingEnabled = this.controls.editingEnabled;
+        this.editingEnabled = false; // Will be synced automatically
         this.currentDrawType = this.drawingTools.currentDrawType;
     }
 
@@ -86,13 +94,57 @@ class MapEditor {
 
     toggleEditing() {
         this.controls.toggleEditing();
-        this.editingEnabled = this.controls.editingEnabled;
     }
 
     toggle3D() {
         this.controls.toggle3D();
     }
+    
+    /**
+     * Update map styles when configuration changes
+     */
+    updateMapStyles(newStyles) {
+        console.log('🎨 Updating map styles, re-evaluating all features...');
+        
+        // Force refresh all feature styles AND visibility
+        const currentZoom = this.map.getView().getZoom();
+        this.vectorSource.getFeatures().forEach(feature => {
+            // Re-evaluate visibility
+            if (FEATURE_VISIBILITY.shouldShowFeature(feature, currentZoom)) {
+                feature.setStyle(FeatureStyles.getFeatureStyle(feature));
+            } else {
+                // Hide feature by setting null style
+                feature.setStyle(null);
+            }
+        });
+        
+        // Trigger map re-render
+        this.map.render();
+        console.log('🎨 Map styles updated and rendered');
+    }
+
+    /**
+     * Refresh all feature styles (useful after z-index changes)
+     */
+    refreshAllFeatureStyles() {
+        console.log('🔄 Refreshing all feature styles with new z-index...');
+        
+        this.vectorSource.getFeatures().forEach(feature => {
+            feature.setStyle(FeatureStyles.getFeatureStyle(feature));
+        });
+        
+        // Trigger map re-render
+        this.map.render();
+        console.log('✅ All feature styles refreshed');
+    }
 }
+
+// Global function to update styles from the styles window
+window.updateMapStyles = function(newStyles) {
+    if (window.mapEditor) {
+        window.mapEditor.updateMapStyles(newStyles);
+    }
+};
 
 // Initialize the map editor when the page loads
 document.addEventListener('DOMContentLoaded', () => {

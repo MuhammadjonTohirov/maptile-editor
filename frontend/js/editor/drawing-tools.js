@@ -20,11 +20,11 @@ class DrawingTools {
     }
 
     initInteractions() {
-        // Select interaction
+        // Select interaction with custom selection logic
         this.select = new ol.interaction.Select({
-            condition: ol.events.condition.click,
+            condition: ol.events.condition.never, // Disable default selection
             style: (feature) => FeatureStyles.getSelectedFeatureStyle(feature),
-            filter: () => true // Allow selection of all features
+            filter: () => true
         });
 
         // Modify interaction with hidden control points
@@ -48,6 +48,11 @@ class DrawingTools {
         // Add interactions to map
         this.mapCore.map.addInteraction(this.select);
         this.mapCore.map.addInteraction(this.modify);
+
+        // Add custom click handler for smart selection
+        this.mapCore.map.on('click', (event) => {
+            this.handleSmartSelection(event);
+        });
 
         // Handle feature selection
         this.select.on('select', (e) => {
@@ -111,7 +116,7 @@ class DrawingTools {
     }
 
     updateButtonStates() {
-        const buttons = ['draw-point', 'draw-line', 'draw-polygon', 'select', 'delete'];
+        const buttons = ['draw-point', 'draw-line', 'draw-polygon', 'select'];
         buttons.forEach(id => {
             const button = document.getElementById(id);
             button.disabled = !this.editor || !this.editor.editingEnabled;
@@ -143,6 +148,96 @@ class DrawingTools {
         this.select.setActive(false);
         this.modify.setActive(false);
         this.updateButtonStates();
+    }
+
+    /**
+     * Handle smart selection - prioritize smaller features over larger ones
+     */
+    handleSmartSelection(event) {
+        // Get all features at the clicked pixel
+        const allFeatures = this.mapCore.map.getFeaturesAtPixel(event.pixel);
+        
+        if (allFeatures.length === 0) {
+            // No features, clear selection
+            this.select.getFeatures().clear();
+            if (this.editor) {
+                this.editor.featureManager.clearSelection();
+            }
+            return;
+        }
+        
+        if (allFeatures.length === 1) {
+            // Only one feature, select it
+            this.selectFeature(allFeatures[0]);
+            return;
+        }
+        
+        // Multiple features - prioritize smaller ones
+        const sortedFeatures = allFeatures.sort((a, b) => {
+            const areaA = this.calculateFeatureArea(a);
+            const areaB = this.calculateFeatureArea(b);
+            
+            // Points always have highest priority
+            if (a.getGeometry().getType() === 'Point' && b.getGeometry().getType() !== 'Point') {
+                return -1;
+            }
+            if (b.getGeometry().getType() === 'Point' && a.getGeometry().getType() !== 'Point') {
+                return 1;
+            }
+            
+            // Lines have higher priority than polygons
+            if (a.getGeometry().getType() === 'LineString' && b.getGeometry().getType() === 'Polygon') {
+                return -1;
+            }
+            if (b.getGeometry().getType() === 'LineString' && a.getGeometry().getType() === 'Polygon') {
+                return 1;
+            }
+            
+            // For same geometry types, prefer smaller area
+            return areaA - areaB;
+        });
+        
+        // Select the highest priority (smallest) feature
+        this.selectFeature(sortedFeatures[0]);
+        
+        console.log(`🎯 Smart selection: Selected "${sortedFeatures[0].get('name') || 'Unnamed'}" from ${allFeatures.length} features`);
+    }
+
+    /**
+     * Calculate feature area for selection prioritization
+     */
+    calculateFeatureArea(feature) {
+        const geometry = feature.getGeometry();
+        const geometryType = geometry.getType();
+        
+        if (geometryType === 'Point') {
+            return 0; // Points have no area
+        }
+        
+        if (geometryType === 'LineString') {
+            return 0.0001; // Small area for lines
+        }
+        
+        if (geometryType === 'Polygon') {
+            const extent = geometry.getExtent();
+            const width = extent[2] - extent[0];
+            const height = extent[3] - extent[1];
+            return width * height;
+        }
+        
+        return 1; // Default for other geometry types
+    }
+
+    /**
+     * Select a specific feature
+     */
+    selectFeature(feature) {
+        this.select.getFeatures().clear();
+        this.select.getFeatures().push(feature);
+        
+        if (this.editor) {
+            this.editor.featureManager.selectFeature(feature);
+        }
     }
 }
 

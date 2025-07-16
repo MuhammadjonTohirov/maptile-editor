@@ -59,14 +59,16 @@ class FeatureManager {
     }
 
     deleteSelectedFeature() {
-        if (!this.selectedFeature || !this.editor || !this.editor.editingEnabled) return;
+        if (!this.selectedFeature || !this.editor || !this.editor.editingEnabled) {
+            return;
+        }
 
         const featureId = this.selectedFeature.getId();
         
-        // Remove from vector source
+        // Remove from vector source immediately
         this.mapCore.vectorSource.removeFeature(this.selectedFeature);
         
-        // Remove from features map
+        // Remove from features map and backend if it's a persisted feature
         if (featureId && !GeometryUtils.isTempId(featureId)) {
             this.mapCore.features.delete(featureId);
             this.deleteFeatureFromBackend(featureId);
@@ -108,6 +110,9 @@ class FeatureManager {
         this.selectedFeature.set('building_number', buildingNumber);
         this.selectedFeature.set('building_type', buildingType);
         this.selectedFeature.set('icon', icon);
+
+        // Refresh feature style to show updated labels immediately
+        this.selectedFeature.setStyle(FeatureStyles.getFeatureStyle(this.selectedFeature));
 
         // Update geometry
         this.updateFeatureFromOL(this.selectedFeature);

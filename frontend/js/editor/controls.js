@@ -10,9 +10,14 @@ class Controls {
         this.featureManager = featureManager;
         this.editingEnabled = false;
         this.is3DEnabled = false;
+        this.editor = null;
         
         this.initControls();
         this.disableEditing();
+    }
+    
+    setEditor(editor) {
+        this.editor = editor;
     }
 
     initControls() {
@@ -33,9 +38,6 @@ class Controls {
             this.drawingTools.disableDrawing();
         });
 
-        document.getElementById('delete').addEventListener('click', () => {
-            this.featureManager.deleteSelectedFeature();
-        });
 
         // Feature management buttons
         document.getElementById('clear-all').addEventListener('click', () => {
@@ -88,6 +90,10 @@ class Controls {
         document.getElementById('cancel-edit').addEventListener('click', () => {
             this.featureManager.clearSelection();
         });
+
+        document.getElementById('delete-feature').addEventListener('click', () => {
+            this.featureManager.deleteSelectedFeature();
+        });
     }
 
     toggleEditing() {
@@ -107,11 +113,17 @@ class Controls {
 
     enableEditing() {
         this.editingEnabled = true;
+        if (this.editor) {
+            this.editor.editingEnabled = true;
+        }
         this.drawingTools.enableEditing();
     }
 
     disableEditing() {
         this.editingEnabled = false;
+        if (this.editor) {
+            this.editor.editingEnabled = false;
+        }
         this.drawingTools.disableEditing();
     }
 
@@ -129,6 +141,7 @@ class Controls {
             button.classList.remove('editing-enabled');
         }
     }
+    
 }
 
 // Export for use in modules
