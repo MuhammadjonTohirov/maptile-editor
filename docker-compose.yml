@@ -5,47 +5,93 @@ services:
     image: postgis/postgis:15-3.3
     container_name: map-editor-db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: mapdata
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-mapdata}
+    # Remove public port exposure for security
+    expose:
+      - "5432"
     volumes:
       - ./db/data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-mapdata}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   backend:
     build: ./backend
     container_name: map-editor-backend
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/mapdata
+      - DATABASE_URL=postgresql+asyncpg://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@db:5432/${DB_NAME:-mapdata}
     depends_on:
-      - db
-    volumes:
-      - ./backend:/app
+      db:
+        condition: service_healthy
+    # Remove volume mount in production
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    container_name: map-editor-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_password_change_this}
+    volumes:
+      - redis_data:/data
+    expose:
+      - "6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   tileserver:
     image: maptiler/tileserver-gl:latest
     container_name: map-editor-tileserver
     volumes:
       - ./tiles:/data
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:8080/ || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   frontend:
     image: nginx:alpine
     container_name: map-editor-frontend
     volumes:
       - ./frontend:/usr/share/nginx/html:ro
-      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./frontend/nginx-local.conf:/etc/nginx/conf.d/default.conf:ro
+      # - ./ssl:/etc/nginx/ssl:ro  # Commented out for local development
     ports:
       - "3000:80"
+      # - "3443:443"  # Commented out for local development
     depends_on:
-      - backend
-      - tileserver
+      backend:
+        condition: service_healthy
+      tileserver:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  redis_data:

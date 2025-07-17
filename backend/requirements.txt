@@ -38,6 +38,9 @@ hiredis==2.2.3
 # Production Server
 gunicorn==21.2.0
 
+# SSL/TLS Support
+cryptography==41.0.7
+
 # Development Tools (optional)
 pytest==7.4.3
 pytest-asyncio==0.21.1

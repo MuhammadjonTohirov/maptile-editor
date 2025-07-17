@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     ssl_enabled: bool = False
     ssl_cert_path: Optional[str] = None
     ssl_key_path: Optional[str] = None
+    ssl_ca_cert_path: Optional[str] = None
+    ssl_key_password: Optional[str] = None
+    ssl_require_client_cert: bool = False
     
     # Cache Configuration
     cache_type: str = "memory"
@@ -132,6 +135,9 @@ class Settings(BaseSettings):
             'ssl_enabled': {'env': 'SSL_ENABLED'},
             'ssl_cert_path': {'env': 'SSL_CERT_PATH'},
             'ssl_key_path': {'env': 'SSL_KEY_PATH'},
+            'ssl_ca_cert_path': {'env': 'SSL_CA_CERT_PATH'},
+            'ssl_key_password': {'env': 'SSL_KEY_PASSWORD'},
+            'ssl_require_client_cert': {'env': 'SSL_REQUIRE_CLIENT_CERT'},
             'cache_type': {'env': 'CACHE_TYPE'},
             'cache_redis_url': {'env': 'CACHE_REDIS_URL'},
             'cache_ttl': {'env': 'CACHE_TTL'},
