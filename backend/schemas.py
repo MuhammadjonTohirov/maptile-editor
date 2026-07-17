@@ -23,6 +23,9 @@ class FeatureBase(BaseModel):
     source_kind: SourceKind = "manual"
     feature_type: Optional[str] = Field(default=None, max_length=64)
     height_m: Optional[float] = Field(default=None, ge=0)
+    # Business-specific properties
+    business_type: Optional[str] = Field(default=None, max_length=100)
+    building_id: Optional[int] = Field(default=None, ge=1)
     # Road-specific properties
     road_type: Optional[str] = Field(default=None, max_length=100)
     direction: Optional[str] = Field(default=None, max_length=20)
@@ -50,6 +53,8 @@ class FeatureUpdate(BaseModel):
     source_kind: Optional[SourceKind] = None
     feature_type: Optional[str] = Field(default=None, max_length=64)
     height_m: Optional[float] = Field(default=None, ge=0)
+    business_type: Optional[str] = Field(default=None, max_length=100)
+    building_id: Optional[int] = Field(default=None, ge=1)
     road_type: Optional[str] = Field(default=None, max_length=100)
     direction: Optional[str] = Field(default=None, max_length=20)
     lane_count: Optional[int] = Field(default=None, ge=0)

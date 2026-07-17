@@ -38,3 +38,19 @@ def test_update_accepts_tombstone_kind():
 def test_name_length_enforced():
     with pytest.raises(ValidationError):
         FeatureCreate(geometry={"type": "Point", "coordinates": [0, 0]}, name="x" * 256)
+
+
+def test_business_registration_fields():
+    feature = FeatureCreate(
+        geometry={"type": "Point", "coordinates": [69.2, 41.3]},
+        feature_type="business",
+        business_type="cafe",
+        building_id=12,
+    )
+    assert feature.business_type == "cafe"
+    assert feature.building_id == 12
+
+
+def test_building_link_must_be_a_real_id():
+    with pytest.raises(ValidationError):
+        FeatureCreate(geometry={"type": "Point", "coordinates": [0, 0]}, building_id=0)

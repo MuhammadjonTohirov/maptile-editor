@@ -55,6 +55,13 @@ async def get_features_version(db: AsyncSession = Depends(get_db)):
     return FeatureVersion(count=count, updated_at=updated_at)
 
 
+@router.get("/features/{feature_id}/businesses", response_model=GeoJSONFeatureCollection)
+async def get_building_businesses(feature_id: int, db: AsyncSession = Depends(get_db)):
+    """All businesses registered in one building (rule B6: one query)."""
+    result = await db.execute(geojson_query().where(Feature.building_id == feature_id))
+    return GeoJSONFeatureCollection(features=[row_to_geojson(row) for row in result])
+
+
 @router.get("/features/{feature_id}", response_model=GeoJSONFeature)
 async def get_feature(feature_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(geojson_query().where(Feature.id == feature_id))

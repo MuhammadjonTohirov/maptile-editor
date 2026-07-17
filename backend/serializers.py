@@ -15,6 +15,7 @@ PROPERTY_COLUMNS = (
     "name", "description", "building_number", "building_type", "icon",
     "osm_id", "osm_type", "source_kind", "feature_type", "height_m",
     "road_type", "direction", "lane_count", "max_speed", "surface",
+    "business_type", "building_id",
 )
 
 

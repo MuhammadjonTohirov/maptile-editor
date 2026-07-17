@@ -1,5 +1,5 @@
 from geoalchemy2 import Geometry
-from sqlalchemy import Column, DateTime, Float, Integer, String, Text, func
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 
 from database import Base
@@ -29,6 +29,11 @@ class Feature(Base):
     source_kind = Column(String(32), nullable=False, default=SOURCE_KIND_MANUAL, index=True)
     feature_type = Column(String(64), index=True)
     height_m = Column(Float)
+
+    # Business registration: a business is a point feature linked to the
+    # building it operates in; several businesses can share one building.
+    business_type = Column(String(100))  # shop, restaurant, cafe, ...
+    building_id = Column(Integer, ForeignKey("features.id", ondelete="SET NULL"), index=True)
     # Road-specific columns
     road_type = Column(String(100))  # highway, street, path, etc.
     direction = Column(String(20))   # oneway, bidirectional, etc.

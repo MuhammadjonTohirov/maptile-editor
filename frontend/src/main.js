@@ -43,7 +43,14 @@ const COLUMN_KEYS = [
   'name', 'description', 'icon', 'building_type', 'building_number',
   'road_type', 'direction', 'lane_count', 'max_speed', 'surface',
   'source_kind', 'feature_type', 'osm_id', 'osm_type', 'height_m',
+  'business_type', 'building_id',
 ];
+
+// Category → suggested emoji; only fills an empty icon field, never overwrites.
+const BUSINESS_ICONS = {
+  shop: '🏪', restaurant: '🍽️', cafe: '☕', pharmacy: '💊',
+  bank: '🏦', office: '🏢', other: '🏷️',
+};
 
 const DRAW_MODE_BUTTONS = {
   point: 'draw-point',
@@ -57,7 +64,8 @@ const DRAW_MODE_BUTTONS = {
 const FORM_FIELDS = [
   'feature-name', 'feature-description', 'feature-icon', 'building-type',
   'building-number', 'road-type', 'road-direction', 'lane-count',
-  'max-speed', 'road-surface',
+  'max-speed', 'road-surface', 'business-type', 'business-floor',
+  'business-phone', 'business-hours',
 ];
 
 function extraProperties(properties) {
@@ -90,6 +98,8 @@ class MapEditor {
         'feature-icon', 'feature-geometry', 'feature-type', 'building-fields',
         'building-type', 'building-number', 'road-fields', 'road-type',
         'road-direction', 'lane-count', 'max-speed', 'road-surface',
+        'business-fields', 'business-type', 'business-floor', 'business-phone',
+        'business-hours', 'building-businesses', 'add-business',
         'feature-search', 'feature-search-options', 'hidden-objects',
         'save-feature', 'close-feature', 'clear-all', 'my-location',
         'load-buildings', 'load-roads', 'load-streetlights', 'load-traffic-lights',
@@ -221,6 +231,11 @@ class MapEditor {
     this.elements['save-feature'].addEventListener('click', () => this.saveProperties());
     this.elements['close-feature'].addEventListener('click', () => this.clearSelection());
     this.elements['feature-type'].addEventListener('change', () => this.updatePropertyFieldVisibility());
+    this.elements['add-business'].addEventListener('click', () => this.addBusinessToBuilding());
+    this.elements['business-type'].addEventListener('change', () => {
+      const icon = BUSINESS_ICONS[this.elements['business-type'].value];
+      if (icon && !this.elements['feature-icon'].value.trim()) this.elements['feature-icon'].value = icon;
+    });
     this.elements['toggle-imports'].addEventListener('change', (event) => this.setImportedLayerVisibility(event.target.checked));
     this.elements['toggle-3d'].addEventListener('change', (event) => {
       setLayerVisibility(this.map, ['base-buildings-3d'], event.target.checked);
@@ -495,7 +510,7 @@ class MapEditor {
 
   featureTypeOptions(geometryType) {
     return {
-      Point: [['point', t('typePoint')], ['poi', t('typePoi')]],
+      Point: [['point', t('typePoint')], ['poi', t('typePoi')], ['business', t('typeBusiness')]],
       LineString: [['line', t('typeLine')], ['road', t('typeRoad')], ['waterway', t('typeWaterway')]],
       Polygon: [['area', t('typeArea')], ['building', t('typeBuilding')], ['landuse', t('typeLanduse')]],
     }[geometryType] || [['manual', t('typeFeature')]];
@@ -531,6 +546,11 @@ class MapEditor {
     this.elements['lane-count'].value = properties.lane_count ?? '';
     this.elements['max-speed'].value = properties.max_speed ?? '';
     this.elements['road-surface'].value = properties.surface || '';
+    this.elements['business-type'].value = properties.business_type || '';
+    this.elements['business-floor'].value = properties.floor || '';
+    this.elements['business-phone'].value = properties.phone || '';
+    this.elements['business-hours'].value = properties.opening_hours || '';
+    this.renderBuildingBusinesses();
     this.updatePropertyFieldVisibility();
     this.elements['delete-feature'].disabled = !this.editingEnabled;
     this.elements['duplicate-feature'].disabled = !this.editingEnabled;
@@ -541,6 +561,7 @@ class MapEditor {
     const featureType = this.elements['feature-type'].value;
     this.elements['building-fields'].hidden = featureType !== 'building';
     this.elements['road-fields'].hidden = featureType !== 'road';
+    this.elements['business-fields'].hidden = featureType !== 'business';
   }
 
   // A new drawing reads the form for its initial payload, so leftover values
@@ -574,12 +595,15 @@ class MapEditor {
     const laneCount = featureType === 'road' ? this.integerFieldValue('lane-count') : null;
     const maxSpeed = featureType === 'road' ? this.integerFieldValue('max-speed') : null;
     const surface = featureType === 'road' ? (this.elements['road-surface'].value.trim() || null) : null;
+    const businessType = featureType === 'business' ? (this.elements['business-type'].value || null) : null;
     const sourceKind = previousProperties.source_kind || 'manual';
+    const extras = extraProperties(storedProperties);
+    if (featureType === 'business') this.applyBusinessExtras(extras);
     return {
       name,
       description,
       geometry,
-      properties: extraProperties(storedProperties),
+      properties: extras,
       building_type: buildingType,
       building_number: buildingNumber,
       icon,
@@ -593,7 +617,19 @@ class MapEditor {
       lane_count: laneCount,
       max_speed: maxSpeed,
       surface,
+      business_type: businessType,
+      building_id: previousProperties.building_id ?? null,
     };
+  }
+
+  // Business extras live in the JSONB properties blob, not in columns.
+  applyBusinessExtras(extras) {
+    const fields = { floor: 'business-floor', phone: 'business-phone', opening_hours: 'business-hours' };
+    for (const [key, elementId] of Object.entries(fields)) {
+      const value = this.elements[elementId].value.trim();
+      if (value) extras[key] = value;
+      else delete extras[key];
+    }
   }
 
   integerFieldValue(elementId) {
@@ -623,6 +659,8 @@ class MapEditor {
       lane_count: p.lane_count ?? null,
       max_speed: p.max_speed ?? null,
       surface: p.surface ?? null,
+      business_type: p.business_type ?? null,
+      building_id: p.building_id ?? null,
     };
   }
 
@@ -677,6 +715,76 @@ class MapEditor {
     }
   }
 
+  // The businesses list renders only while its building stays selected; the
+  // fetch result for a superseded selection is dropped.
+  async renderBuildingBusinesses() {
+    const list = this.elements['building-businesses'];
+    const selected = this.selected;
+    const isSavedBuilding = selected?.properties?.feature_type === 'building' && selected?.serverId;
+    const showEmpty = () => {
+      const empty = document.createElement('li');
+      empty.className = 'empty';
+      empty.textContent = t('businessesEmpty');
+      list.replaceChildren(empty);
+    };
+    showEmpty();
+    this.elements['add-business'].disabled = !this.editingEnabled || !isSavedBuilding;
+    if (!isSavedBuilding) return;
+    try {
+      const collection = await featuresApi.businesses(selected.serverId);
+      if (this.selected !== selected) return;
+      if (!collection.features.length) return;
+      list.replaceChildren(...collection.features.map((feature) => {
+        const item = document.createElement('li');
+        const open = document.createElement('button');
+        open.type = 'button';
+        const icon = feature.properties?.icon || '';
+        open.textContent = `${icon} ${feature.properties?.name || t('businessUnnamed')}`.trim();
+        open.addEventListener('click', () => {
+          this.map.flyTo({
+            center: feature.geometry.coordinates,
+            zoom: Math.max(this.map.getZoom(), 17),
+            essential: true,
+          });
+          this.selectRenderedFeature(feature);
+        });
+        item.append(open);
+        return item;
+      }));
+    } catch (error) {
+      console.error('Unable to load building businesses', error);
+    }
+  }
+
+  async addBusinessToBuilding() {
+    if (!this.editingEnabled || !this.selected?.serverId) return;
+    const buildingId = Number(this.selected.serverId);
+    if (!Number.isInteger(buildingId)) return;
+    const [[west, south], [east, north]] = geometryBounds(this.selected.geometry);
+    try {
+      const saved = await featuresApi.create({
+        name: '',
+        description: '',
+        geometry: { type: 'Point', coordinates: [(west + east) / 2, (south + north) / 2] },
+        properties: {},
+        source_kind: 'manual',
+        feature_type: 'business',
+        icon: BUSINESS_ICONS.shop,
+        building_id: buildingId,
+      });
+      this.pushUndo(() => featuresApi.remove(saved.id));
+      this.adoptSavedFeature(saved);
+      this.showFeaturePanel();
+      this.beginGeometryEditing(String(saved.id), saved.geometry);
+      this.refreshEditorTiles();
+      await this.refreshEditorData();
+      this.setStatus(t('businessAdded'));
+    } catch (error) {
+      console.error('Unable to add business', error);
+      this.setStatus(t('businessAddFailed'), true);
+    }
+  }
+
   mergeFeatureProperties(feature) {
     return {
       ...feature.properties,
@@ -690,6 +798,8 @@ class MapEditor {
       osm_id: feature.osm_id,
       osm_type: feature.osm_type,
       height_m: feature.height_m,
+      business_type: feature.business_type,
+      building_id: feature.building_id,
       road_type: feature.road_type,
       direction: feature.direction,
       lane_count: feature.lane_count,

@@ -119,6 +119,13 @@ backend is volume-mounted and reloads on save.
   hit reliably. Click selection also uses a 6px box around the pointer.
 - Manual edits are marked `source_kind=manual` and stay visually distinct from
   imported OSM data.
+- A business is a point feature (`feature_type=business`) registered inside a
+  building through the `building_id` column (FK with ON DELETE SET NULL, so
+  deleting the building keeps its businesses as free-standing POIs). Several
+  businesses can share one building. The building's properties panel lists
+  them (`GET /api/features/{id}/businesses`) and adds one at the building
+  center; the `business_type` category suggests an emoji icon, and extras
+  (`floor`, `phone`, `opening_hours`) live in the JSONB properties blob.
 - Features can carry an emoji in the `icon` column. Styles reference it as an
   `emoji:<char>` image; `frontend/src/emoji-icons.js` rasterizes emoji on the
   `styleimagemissing` event, so no sprite sheet is needed. Points with an icon

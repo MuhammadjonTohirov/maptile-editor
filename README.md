@@ -69,7 +69,10 @@ removed from the map; individual objects can be restored from the editor's
 Editor tools: point/line/polygon/rectangle/circle drawing with vertex snapping
 to saved features, whole-feature drag plus rotate (Ctrl+R) and scale (Ctrl+S),
 duplicate, undo (Ctrl+Z), search-by-name with fly-to, and per-feature emoji
-icons, which appear only at street-level zooms. Name labels render in both the
+icons, which appear only at street-level zooms. Businesses can be registered
+into a building — several per building — as draggable point features with a
+category, floor/unit, phone, and opening hours; selecting the building lists
+its businesses and adds new ones at its center. Name labels render in both the
 editor and the client view: point and polygon names at the feature's anchor,
 street and line names along the road line itself. Roads label only their real
 street title; unnamed roads carry no label.
