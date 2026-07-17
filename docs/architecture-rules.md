@@ -124,8 +124,10 @@ commit with the reason.
   Every catalog must mirror the English key set and `{placeholder}` tokens.
 - **F8 — The client is a finished map.** `client.html` renders detail
   exclusively from editor data (base detail layers hidden), repaints edits
-  with the basemap palette, polls `/api/features` only while the tab is
-  visible, and exposes no editing affordance.
+  with the basemap palette, polls the cheap `/api/features/version` stamp
+  only while the tab is visible — fetching the collection and reloading the
+  tile source only when the stamp changes — and exposes no editing
+  affordance.
 - **F9 — Undo is inverse API calls.** Every mutation pushes its inverse
   (create→delete, update→restore previous, tombstone→restore kind) onto a
   bounded stack; undo replays the inverse and refreshes tiles + data.

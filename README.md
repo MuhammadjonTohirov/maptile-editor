@@ -86,7 +86,10 @@ The current view (zoom, center, bearing, pitch) is kept in the URL fragment in
 both the editor and the client, so a location can be bookmarked, shared, or
 reloaded in place. Road widths scale exponentially with zoom past the base
 tiles' maxzoom (14) up to z20, per road class, so zoomed-in streets approach
-plausible ground widths instead of freezing at a few pixels.
+plausible ground widths instead of freezing at a few pixels. Roads render
+with round caps and joins (seamless joints between way segments at extreme
+zoom) and sort by class, so a primary road always crosses above a service
+road.
 
 ## Data and attribution
 

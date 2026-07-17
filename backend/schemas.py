@@ -77,6 +77,13 @@ class GeoJSONFeatureCollection(BaseModel):
     features: list[GeoJSONFeature]
 
 
+class FeatureVersion(BaseModel):
+    """Cheap change stamp: clients poll this instead of the full collection."""
+
+    count: int
+    updated_at: Optional[datetime]
+
+
 class BoundsRequest(BaseModel):
     west: float
     south: float

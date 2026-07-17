@@ -84,6 +84,17 @@ const LINE_WIDTH = zoomWidths((stop) => ['match', ['coalesce', ['get', 'feature_
   'road', roadWidthAt(stop),
   GENERIC_LINE_WIDTHS[stop]]);
 const ROAD_CASING_WIDTH = zoomWidths((stop) => roadWidthAt(stop, 1.35));
+// Higher-class roads sort above lower ones at crossings; the style's road
+// layers carry the same ordering for their own features.
+const ROAD_SORT_KEY = ['match', ['coalesce', ['get', 'road_type'], ''],
+  ['motorway', 'motorway_link'], 10,
+  ['trunk', 'trunk_link'], 9,
+  ['primary', 'primary_link'], 8,
+  ['secondary', 'secondary_link'], 7,
+  ['tertiary', 'tertiary_link'], 6,
+  ['residential', 'unclassified', 'living_street', 'pedestrian'], 5,
+  ['footway', 'path', 'steps', 'cycleway', 'track'], 2,
+  4];
 const FILL_COLOR = ['match', ['coalesce', ['get', 'feature_type'], ''], 'landuse', '#f3f0ea', '#dcd6cf'];
 
 function setPaint(layerId, properties) {
@@ -130,6 +141,11 @@ function blendEditsIntoBasemap() {
       ['==', ['get', 'feature_type'], 'road'],
       ['!=', ['get', 'source_kind'], 'base_tombstone'],
     ],
+    layout: {
+      'line-cap': 'round',
+      'line-join': 'round',
+      'line-sort-key': ROAD_SORT_KEY,
+    },
     paint: {
       'line-color': '#c8c2b9',
       'line-width': ROAD_CASING_WIDTH,
@@ -157,17 +173,21 @@ function blendEditsIntoBasemap() {
 }
 
 let revision = 0;
-let lastSnapshot = null;
+let lastVersion = null;
 
+// Polling asks only for a change stamp (count + latest timestamp); the full
+// collection and the tile source reload only when an edit actually happened,
+// so an idle map never repaints.
 async function refreshEdits() {
   try {
+    const version = await featuresApi.version();
+    const stamp = `${version.count}:${version.updated_at}`;
+    if (stamp === lastVersion) return;
     const collection = await featuresApi.list();
-    const snapshot = JSON.stringify(collection);
-    if (snapshot === lastSnapshot) return;
-    lastSnapshot = snapshot;
     map.getSource('editor_anchors')?.setData(featureAnchors(collection.features));
     revision += 1;
     map.getSource('editor')?.setTiles([`/tiles/editor/{z}/{x}/{y}?revision=${revision}`]);
+    lastVersion = stamp;
   } catch (error) {
     console.error('Unable to refresh edits', error);
   }

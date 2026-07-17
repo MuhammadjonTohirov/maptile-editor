@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from geoalchemy2.functions import ST_AsGeoJSON
 from geoalchemy2.shape import from_shape
 from shapely.geometry import shape
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +16,7 @@ from schemas import (
     FeatureCreate,
     FeatureResponse,
     FeatureUpdate,
+    FeatureVersion,
     GeoJSONFeature,
     GeoJSONFeatureCollection,
 )
@@ -43,6 +44,15 @@ def _conflict(error: IntegrityError) -> HTTPException:
 async def get_features(db: AsyncSession = Depends(get_db)):
     result = await db.execute(geojson_query())
     return GeoJSONFeatureCollection(features=[row_to_geojson(row) for row in result])
+
+
+@router.get("/features/version", response_model=FeatureVersion)
+async def get_features_version(db: AsyncSession = Depends(get_db)):
+    """One aggregate row instead of the whole collection (rule B6): any
+    create, update, or delete changes the count or the max timestamp."""
+    result = await db.execute(select(func.count(Feature.id), func.max(Feature.updated_at)))
+    count, updated_at = result.one()
+    return FeatureVersion(count=count, updated_at=updated_at)
 
 
 @router.get("/features/{feature_id}", response_model=GeoJSONFeature)

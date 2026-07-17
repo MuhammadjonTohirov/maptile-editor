@@ -23,7 +23,9 @@ PostGIS (host :5434; internal :5432)
 
 - `frontend/styles/editor.json` is the only client map style.
 - `frontend/client.html` (`src/client.js`) is a read-only viewer that polls
-  `/api/features` to pick up edits automatically. It hides all basemap detail
+  the lightweight `/api/features/version` change stamp and reloads feature
+  data and editor tiles only when an edit actually happened, so an idle map
+  never repaints. It hides all basemap detail
   layers (buildings, roads, waterways, POIs, road labels) — the basemap only
   provides context (terrain, water, boundaries, place names) and every detail
   object comes from editor data, restyled with the basemap palette.

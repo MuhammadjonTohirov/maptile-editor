@@ -245,6 +245,36 @@
             19
           ]
         ]
+      },
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round",
+        "line-sort-key": [
+          "match",
+          [
+            "get",
+            "class"
+          ],
+          "motorway",
+          10,
+          "trunk",
+          9,
+          "primary",
+          8,
+          "secondary",
+          7,
+          "tertiary",
+          6,
+          "minor",
+          5,
+          "service",
+          4,
+          "track",
+          3,
+          "path",
+          2,
+          4
+        ]
       }
     },
     {
@@ -372,6 +402,36 @@
             6,
             14
           ]
+        ]
+      },
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round",
+        "line-sort-key": [
+          "match",
+          [
+            "get",
+            "class"
+          ],
+          "motorway",
+          10,
+          "trunk",
+          9,
+          "primary",
+          8,
+          "secondary",
+          7,
+          "tertiary",
+          6,
+          "minor",
+          5,
+          "service",
+          4,
+          "track",
+          3,
+          "path",
+          2,
+          4
         ]
       }
     },
@@ -528,7 +588,61 @@
         ]
       ],
       "layout": {
-        "visibility": "none"
+        "visibility": "none",
+        "line-cap": "round",
+        "line-join": "round",
+        "line-sort-key": [
+          "match",
+          [
+            "coalesce",
+            [
+              "get",
+              "road_type"
+            ],
+            ""
+          ],
+          [
+            "motorway",
+            "motorway_link"
+          ],
+          10,
+          [
+            "trunk",
+            "trunk_link"
+          ],
+          9,
+          [
+            "primary",
+            "primary_link"
+          ],
+          8,
+          [
+            "secondary",
+            "secondary_link"
+          ],
+          7,
+          [
+            "tertiary",
+            "tertiary_link"
+          ],
+          6,
+          [
+            "residential",
+            "unclassified",
+            "living_street",
+            "pedestrian"
+          ],
+          5,
+          [
+            "footway",
+            "path",
+            "steps",
+            "cycleway",
+            "track"
+          ],
+          2,
+          4
+        ]
       },
       "paint": {
         "line-color": "#7b61ff",
@@ -701,6 +815,62 @@
           9,
           20,
           14
+        ]
+      },
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round",
+        "line-sort-key": [
+          "match",
+          [
+            "coalesce",
+            [
+              "get",
+              "road_type"
+            ],
+            ""
+          ],
+          [
+            "motorway",
+            "motorway_link"
+          ],
+          10,
+          [
+            "trunk",
+            "trunk_link"
+          ],
+          9,
+          [
+            "primary",
+            "primary_link"
+          ],
+          8,
+          [
+            "secondary",
+            "secondary_link"
+          ],
+          7,
+          [
+            "tertiary",
+            "tertiary_link"
+          ],
+          6,
+          [
+            "residential",
+            "unclassified",
+            "living_street",
+            "pedestrian"
+          ],
+          5,
+          [
+            "footway",
+            "path",
+            "steps",
+            "cycleway",
+            "track"
+          ],
+          2,
+          4
         ]
       }
     },

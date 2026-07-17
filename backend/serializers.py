@@ -19,12 +19,14 @@ PROPERTY_COLUMNS = (
 
 
 def geojson_query() -> Select:
+    # Deterministic order keeps repeated reads byte-identical, so clients can
+    # compare responses without seeing phantom changes.
     return select(
         Feature.id,
         Feature.properties,
         *(getattr(Feature, column) for column in PROPERTY_COLUMNS),
         ST_AsGeoJSON(Feature.geometry).label("geometry_json"),
-    )
+    ).order_by(Feature.id)
 
 
 def row_to_geojson(row) -> GeoJSONFeature:

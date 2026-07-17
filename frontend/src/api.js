@@ -37,6 +37,7 @@ async function request(path, { method = 'GET', body } = {}) {
 
 export const featuresApi = {
   list: () => request('/api/features'),
+  version: () => request('/api/features/version'),
   get: (id) => request(`/api/features/${id}`),
   create: (payload) => request('/api/features', { method: 'POST', body: payload }),
   update: (id, payload) => request(`/api/features/${id}`, { method: 'PUT', body: payload }),
