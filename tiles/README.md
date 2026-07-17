@@ -1,21 +1,21 @@
-# Tiles Directory
+# Generated tile artifacts
 
-Place your `.mbtiles` files in this directory for the TileServer to serve them.
+This directory contains ignored deployment artifacts for Martin.
 
-## Getting Sample Tiles
+- `osm_uzbekistan.mbtiles` — OpenMapTiles-compatible, read-only OSM vector
+  basemap for Uzbekistan (zoom 0–14).
+- `osm_uzbekistan.manifest.json` — source, checksum, pinned build revision, and
+  generation time for that archive.
 
-### Option 1: Download from OpenMapTiles
-1. Visit: https://openmaptiles.org/downloads/
-2. Download a region in `.mbtiles` format
-3. Place the file in this directory
+Build or refresh the archive with:
 
-### Option 2: Generate with Tilemaker
-1. Download OSM data in `.pbf` format
-2. Use tilemaker to generate vector tiles
-3. Export as `.mbtiles` format
+```bash
+./scripts/build-uzbekistan-tiles.sh
+```
 
-### Option 3: Use OpenStreetMap data
-For testing, you can download small regions from:
-- https://download.geofabrik.de/
+Martin serves the archive internally. The browser reaches it only through the
+frontend's same-origin `/tiles/base/{z}/{x}/{y}` route. Editor data comes from
+PostGIS at `/tiles/editor/{z}/{x}/{y}`.
 
-The TileServer will automatically serve any `.mbtiles` files placed here.
+The basemap must retain this attribution: `© OpenMapTiles © OpenStreetMap
+contributors`.

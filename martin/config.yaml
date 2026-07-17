@@ -1,0 +1,17 @@
+# Martin exposes the immutable OSM basemap archive and dynamic PostGIS editor data.
+listen_addresses: 0.0.0.0:3000
+preferred_encoding: gzip
+# Martin's internal tile cache is never invalidated when PostGIS rows change,
+# so cached editor tiles keep serving deleted features. The basemap does not
+# need Martin's cache either: browsers cache it via nginx (max-age=86400).
+cache_size_mb: 0
+postgres:
+  connection_string: ${DATABASE_URL}
+  auto_publish:
+    from_schemas:
+      - public
+  pool_size: 10
+  reload_interval: 0s
+mbtiles:
+  sources:
+    osm_base: /tiles/osm_uzbekistan.mbtiles

@@ -1,0 +1,7 @@
+# OpenMapTiles' import-data service only reads .env, unlike the other build
+# services. Supply the shell-selected port so every temporary build container
+# reaches the isolated PostgreSQL instance.
+services:
+  import-data:
+    environment:
+      PGPORT: "${PGPORT:-5432}"

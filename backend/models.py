@@ -1,26 +1,39 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, func
-from sqlalchemy.dialects.postgresql import JSONB
 from geoalchemy2 import Geometry
+from sqlalchemy import Column, DateTime, Float, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
+
 from database import Base
+
+SOURCE_KIND_MANUAL = "manual"
+SOURCE_KIND_OSM_IMPORT = "osm_import"
+# A deleted local copy of a basemap object stays as an invisible tombstone row
+# so the read-only basemap original remains masked.
+SOURCE_KIND_BASE_TOMBSTONE = "base_tombstone"
+SOURCE_KINDS = (SOURCE_KIND_MANUAL, SOURCE_KIND_OSM_IMPORT, SOURCE_KIND_BASE_TOMBSTONE)
+
 
 class Feature(Base):
     __tablename__ = "features"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255))
     description = Column(Text)
     geometry = Column(Geometry("GEOMETRY", srid=4326))
-    properties = Column(JSONB, default={})
+    properties = Column(JSONB, default=dict)
     # Building-specific columns
     building_number = Column(String(50))
     building_type = Column(String(100))
     icon = Column(String(100))
     osm_id = Column(String(50), index=True)  # For referencing OSM data
+    osm_type = Column(String(16), index=True)  # node, way, or relation
+    source_kind = Column(String(32), nullable=False, default=SOURCE_KIND_MANUAL, index=True)
+    feature_type = Column(String(64), index=True)
+    height_m = Column(Float)
     # Road-specific columns
     road_type = Column(String(100))  # highway, street, path, etc.
     direction = Column(String(20))   # oneway, bidirectional, etc.
     lane_count = Column(Integer)
     max_speed = Column(Integer)
     surface = Column(String(50))     # asphalt, concrete, gravel, etc.
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

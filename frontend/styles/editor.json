@@ -1,0 +1,1092 @@
+{
+  "version": 8,
+  "name": "Uzbekistan OSM Bright Editor",
+  "metadata": {
+    "maplibre:type": "map",
+    "maptile-editor:base": "OpenMapTiles-compatible Uzbekistan archive"
+  },
+  "sources": {
+    "osm_base": {
+      "type": "vector",
+      "tiles": [
+        "/tiles/base/{z}/{x}/{y}"
+      ],
+      "minzoom": 0,
+      "maxzoom": 14,
+      "attribution": "© OpenMapTiles © OpenStreetMap contributors"
+    },
+    "editor": {
+      "type": "vector",
+      "tiles": [
+        "/tiles/editor/{z}/{x}/{y}"
+      ],
+      "minzoom": 0,
+      "maxzoom": 20,
+      "promoteId": "id"
+    },
+    "editor_anchors": {
+      "type": "geojson",
+      "data": {
+        "type": "FeatureCollection",
+        "features": []
+      }
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#dcebf4"
+      }
+    },
+    {
+      "id": "landcover",
+      "type": "fill",
+      "source": "osm_base",
+      "source-layer": "landcover",
+      "paint": {
+        "fill-color": [
+          "match",
+          [
+            "get",
+            "class"
+          ],
+          "wood",
+          "#c9dfb9",
+          "grass",
+          "#d9edc9",
+          "#eaf1e6"
+        ]
+      }
+    },
+    {
+      "id": "landuse",
+      "type": "fill",
+      "source": "osm_base",
+      "source-layer": "landuse",
+      "paint": {
+        "fill-color": [
+          "match",
+          [
+            "get",
+            "class"
+          ],
+          "park",
+          "#d4e9c6",
+          "residential",
+          "#edf0e9",
+          "industrial",
+          "#e9e6e0",
+          "#f3f0ea"
+        ],
+        "fill-opacity": 0.85
+      }
+    },
+    {
+      "id": "water",
+      "type": "fill",
+      "source": "osm_base",
+      "source-layer": "water",
+      "paint": {
+        "fill-color": "#acd9ec"
+      }
+    },
+    {
+      "id": "waterway",
+      "type": "line",
+      "source": "osm_base",
+      "source-layer": "waterway",
+      "paint": {
+        "line-color": "#8fc8e5",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          6,
+          0.6,
+          14,
+          2
+        ]
+      }
+    },
+    {
+      "id": "boundaries",
+      "type": "line",
+      "source": "osm_base",
+      "source-layer": "boundary",
+      "paint": {
+        "line-color": "#9b8fc6",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          4,
+          0.4,
+          12,
+          1.4
+        ],
+        "line-dasharray": [
+          2,
+          2
+        ]
+      }
+    },
+    {
+      "id": "transportation-casing",
+      "type": "line",
+      "source": "osm_base",
+      "source-layer": "transportation",
+      "paint": {
+        "line-color": "#c8c2b9",
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          5,
+          [
+            "match",
+            [
+              "get",
+              "class"
+            ],
+            "motorway",
+            1.8,
+            "trunk",
+            1.6,
+            "primary",
+            1.4,
+            0.7
+          ],
+          14,
+          [
+            "match",
+            [
+              "get",
+              "class"
+            ],
+            "motorway",
+            10,
+            "trunk",
+            8,
+            "primary",
+            7,
+            "secondary",
+            5,
+            "tertiary",
+            4,
+            2.5
+          ],
+          18,
+          [
+            "match",
+            [
+              "get",
+              "class"
+            ],
+            "motorway",
+            30,
+            "trunk",
+            25,
+            "primary",
+            21,
+            "secondary",
+            17,
+            "tertiary",
+            14,
+            "minor",
+            13,
+            "service",
+            9.5,
+            "path",
+            0,
+            "track",
+            0,
+            9.5
+          ],
+          20,
+          [
+            "match",
+            [
+              "get",
+              "class"
+            ],
+            "motorway",
+            58,
+            "trunk",
+            49,
+            "primary",
+            42,
+            "secondary",
+            33,
+            "tertiary",
+            28,
+            "minor",
+            26,
+            "service",
+            19,
+            "path",
+            0,
+            "track",
+            0,
+            19
+          ]
+        ]
+      }
+    },
+    {
+      "id": "transportation",
+      "type": "line",
+      "source": "osm_base",
+      "source-layer": "transportation",
+      "paint": {
+        "line-color": [
+          "match",
+          [
+            "get",
+            "class"
+          ],
+          "motorway",
+          "#ee9b77",
+          "trunk",
+          "#f1b184",
+          "primary",
+          "#f7cf9e",
+          "secondary",
+          "#f7e6a8",
+          "tertiary",
+          "#ffffff",
+          "minor",
+          "#ffffff",
+          "service",
+          "#f6f6f6",
+          "#e5e5e5"
+        ],
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          5,
+          [
+            "match",
+            [
+              "get",
+              "class"
+            ],
+            "motorway",
+            1.2,
+            "trunk",
+            1,
+            "primary",
+            0.9,
+            0.45
+          ],
+          14,
+          [
+            "match",
+            [
+              "get",
+              "class"
+            ],
+            "motorway",
+            7,
+            "trunk",
+            5.8,
+            "primary",
+            5,
+            "secondary",
+            3.7,
+            "tertiary",
+            3,
+            1.6
+          ],
+          18,
+          [
+            "match",
+            [
+              "get",
+              "class"
+            ],
+            "motorway",
+            24,
+            "trunk",
+            20,
+            "primary",
+            17,
+            "secondary",
+            13,
+            "tertiary",
+            11,
+            "minor",
+            10,
+            "service",
+            7,
+            "path",
+            3,
+            "track",
+            3,
+            7
+          ],
+          20,
+          [
+            "match",
+            [
+              "get",
+              "class"
+            ],
+            "motorway",
+            48,
+            "trunk",
+            40,
+            "primary",
+            34,
+            "secondary",
+            26,
+            "tertiary",
+            22,
+            "minor",
+            20,
+            "service",
+            14,
+            "path",
+            6,
+            "track",
+            6,
+            14
+          ]
+        ]
+      }
+    },
+    {
+      "id": "buildings",
+      "type": "fill",
+      "source": "osm_base",
+      "source-layer": "building",
+      "minzoom": 12,
+      "paint": {
+        "fill-color": "#dcd6cf",
+        "fill-outline-color": "#c8c0b8",
+        "fill-opacity": 0.9
+      }
+    },
+    {
+      "id": "place-labels",
+      "type": "symbol",
+      "source": "osm_base",
+      "source-layer": "place",
+      "minzoom": 4,
+      "layout": {
+        "text-field": [
+          "coalesce",
+          [
+            "get",
+            "name:latin"
+          ],
+          [
+            "get",
+            "name"
+          ]
+        ],
+        "text-font": [
+          "sans-serif"
+        ],
+        "text-size": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          4,
+          11,
+          12,
+          16
+        ],
+        "text-max-width": 8
+      },
+      "paint": {
+        "text-color": "#334155",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.2
+      }
+    },
+    {
+      "id": "road-labels",
+      "type": "symbol",
+      "source": "osm_base",
+      "source-layer": "transportation_name",
+      "minzoom": 12,
+      "layout": {
+        "symbol-placement": "line",
+        "text-field": [
+          "coalesce",
+          [
+            "get",
+            "name:latin"
+          ],
+          [
+            "get",
+            "name"
+          ]
+        ],
+        "text-font": [
+          "sans-serif"
+        ],
+        "text-size": 11
+      },
+      "paint": {
+        "text-color": "#596675",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1
+      }
+    },
+    {
+      "id": "poi",
+      "type": "circle",
+      "source": "osm_base",
+      "source-layer": "poi",
+      "minzoom": 15,
+      "paint": {
+        "circle-color": "#66778b",
+        "circle-radius": 3,
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 1
+      }
+    },
+    {
+      "id": "editor-import-fill",
+      "type": "fill",
+      "source": "editor",
+      "source-layer": "features",
+      "filter": [
+        "all",
+        [
+          "==",
+          [
+            "get",
+            "source_kind"
+          ],
+          "osm_import"
+        ],
+        [
+          "==",
+          [
+            "geometry-type"
+          ],
+          "Polygon"
+        ]
+      ],
+      "layout": {
+        "visibility": "none"
+      },
+      "paint": {
+        "fill-color": "#7b61ff",
+        "fill-opacity": 0.12,
+        "fill-outline-color": "#7b61ff"
+      }
+    },
+    {
+      "id": "editor-import-line",
+      "type": "line",
+      "source": "editor",
+      "source-layer": "features",
+      "filter": [
+        "all",
+        [
+          "==",
+          [
+            "get",
+            "source_kind"
+          ],
+          "osm_import"
+        ],
+        [
+          "==",
+          [
+            "geometry-type"
+          ],
+          "LineString"
+        ]
+      ],
+      "layout": {
+        "visibility": "none"
+      },
+      "paint": {
+        "line-color": "#7b61ff",
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          14,
+          2.5,
+          18,
+          7,
+          20,
+          12
+        ],
+        "line-opacity": 0.85
+      }
+    },
+    {
+      "id": "editor-import-point",
+      "type": "circle",
+      "source": "editor",
+      "source-layer": "features",
+      "filter": [
+        "all",
+        [
+          "all",
+          [
+            "==",
+            [
+              "get",
+              "source_kind"
+            ],
+            "osm_import"
+          ],
+          [
+            "==",
+            [
+              "geometry-type"
+            ],
+            "Point"
+          ]
+        ],
+        [
+          "any",
+          [
+            "!",
+            [
+              "has",
+              "icon"
+            ]
+          ],
+          [
+            "==",
+            [
+              "get",
+              "icon"
+            ],
+            ""
+          ]
+        ]
+      ],
+      "layout": {
+        "visibility": "none"
+      },
+      "paint": {
+        "circle-color": "#7b61ff",
+        "circle-radius": 5,
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 1.5
+      }
+    },
+    {
+      "id": "editor-manual-fill",
+      "type": "fill",
+      "source": "editor",
+      "source-layer": "features",
+      "filter": [
+        "all",
+        [
+          "==",
+          [
+            "get",
+            "source_kind"
+          ],
+          "manual"
+        ],
+        [
+          "==",
+          [
+            "geometry-type"
+          ],
+          "Polygon"
+        ]
+      ],
+      "paint": {
+        "fill-color": "#0b72d9",
+        "fill-opacity": 0.3
+      }
+    },
+    {
+      "id": "editor-manual-outline",
+      "type": "line",
+      "source": "editor",
+      "source-layer": "features",
+      "filter": [
+        "all",
+        [
+          "==",
+          [
+            "get",
+            "source_kind"
+          ],
+          "manual"
+        ],
+        [
+          "==",
+          [
+            "geometry-type"
+          ],
+          "Polygon"
+        ]
+      ],
+      "paint": {
+        "line-color": "#0757ad",
+        "line-width": 2
+      }
+    },
+    {
+      "id": "editor-manual-lines",
+      "type": "line",
+      "source": "editor",
+      "source-layer": "features",
+      "filter": [
+        "all",
+        [
+          "==",
+          [
+            "get",
+            "source_kind"
+          ],
+          "manual"
+        ],
+        [
+          "==",
+          [
+            "geometry-type"
+          ],
+          "LineString"
+        ]
+      ],
+      "paint": {
+        "line-color": "#0757ad",
+        "line-width": [
+          "interpolate",
+          [
+            "exponential",
+            1.5
+          ],
+          [
+            "zoom"
+          ],
+          14,
+          4,
+          18,
+          9,
+          20,
+          14
+        ]
+      }
+    },
+    {
+      "id": "editor-manual-points",
+      "type": "circle",
+      "source": "editor",
+      "source-layer": "features",
+      "filter": [
+        "all",
+        [
+          "all",
+          [
+            "==",
+            [
+              "get",
+              "source_kind"
+            ],
+            "manual"
+          ],
+          [
+            "==",
+            [
+              "geometry-type"
+            ],
+            "Point"
+          ]
+        ],
+        [
+          "any",
+          [
+            "!",
+            [
+              "has",
+              "icon"
+            ]
+          ],
+          [
+            "==",
+            [
+              "get",
+              "icon"
+            ],
+            ""
+          ]
+        ]
+      ],
+      "paint": {
+        "circle-color": "#0b72d9",
+        "circle-radius": 6,
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 2
+      }
+    },
+    {
+      "id": "editor-import-icons",
+      "type": "symbol",
+      "source": "editor_anchors",
+      "minzoom": 15,
+      "filter": [
+        "all",
+        [
+          "==",
+          [
+            "get",
+            "source_kind"
+          ],
+          "osm_import"
+        ],
+        [
+          "!=",
+          [
+            "get",
+            "icon"
+          ],
+          ""
+        ]
+      ],
+      "layout": {
+        "icon-image": [
+          "concat",
+          "emoji:",
+          [
+            "get",
+            "icon"
+          ]
+        ],
+        "icon-size": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          15,
+          0.5,
+          17,
+          0.75
+        ],
+        "icon-allow-overlap": true,
+        "visibility": "none"
+      }
+    },
+    {
+      "id": "editor-import-labels",
+      "type": "symbol",
+      "source": "editor_anchors",
+      "minzoom": 14,
+      "filter": [
+        "all",
+        [
+          "==",
+          [
+            "get",
+            "source_kind"
+          ],
+          "osm_import"
+        ],
+        [
+          "!=",
+          [
+            "get",
+            "name"
+          ],
+          ""
+        ]
+      ],
+      "layout": {
+        "text-field": [
+          "get",
+          "name"
+        ],
+        "text-font": [
+          "sans-serif"
+        ],
+        "text-size": 12,
+        "text-anchor": "top",
+        "text-offset": [
+          0,
+          0.9
+        ],
+        "text-max-width": 9,
+        "visibility": "none"
+      },
+      "paint": {
+        "text-color": "#3d4754",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.2
+      }
+    },
+    {
+      "id": "editor-import-line-labels",
+      "type": "symbol",
+      "source": "editor",
+      "source-layer": "features",
+      "minzoom": 12,
+      "filter": [
+        "all",
+        [
+          "==",
+          [
+            "get",
+            "source_kind"
+          ],
+          "osm_import"
+        ],
+        [
+          "==",
+          [
+            "geometry-type"
+          ],
+          "LineString"
+        ],
+        [
+          "!=",
+          [
+            "coalesce",
+            [
+              "get",
+              "name"
+            ],
+            ""
+          ],
+          ""
+        ]
+      ],
+      "layout": {
+        "symbol-placement": "line",
+        "text-field": [
+          "get",
+          "name"
+        ],
+        "text-font": [
+          "sans-serif"
+        ],
+        "text-size": 11,
+        "visibility": "none"
+      },
+      "paint": {
+        "text-color": "#596675",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1
+      }
+    },
+    {
+      "id": "editor-manual-icons",
+      "type": "symbol",
+      "source": "editor_anchors",
+      "minzoom": 14,
+      "filter": [
+        "all",
+        [
+          "==",
+          [
+            "get",
+            "source_kind"
+          ],
+          "manual"
+        ],
+        [
+          "!=",
+          [
+            "get",
+            "icon"
+          ],
+          ""
+        ]
+      ],
+      "layout": {
+        "icon-image": [
+          "concat",
+          "emoji:",
+          [
+            "get",
+            "icon"
+          ]
+        ],
+        "icon-size": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          14,
+          0.5,
+          17,
+          0.75
+        ],
+        "icon-allow-overlap": true
+      }
+    },
+    {
+      "id": "editor-manual-labels",
+      "type": "symbol",
+      "source": "editor_anchors",
+      "minzoom": 14,
+      "filter": [
+        "all",
+        [
+          "==",
+          [
+            "get",
+            "source_kind"
+          ],
+          "manual"
+        ],
+        [
+          "!=",
+          [
+            "get",
+            "name"
+          ],
+          ""
+        ]
+      ],
+      "layout": {
+        "text-field": [
+          "get",
+          "name"
+        ],
+        "text-font": [
+          "sans-serif"
+        ],
+        "text-size": 12,
+        "text-anchor": "top",
+        "text-offset": [
+          0,
+          0.9
+        ],
+        "text-max-width": 9
+      },
+      "paint": {
+        "text-color": "#3d4754",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.2
+      }
+    },
+    {
+      "id": "editor-manual-line-labels",
+      "type": "symbol",
+      "source": "editor",
+      "source-layer": "features",
+      "minzoom": 12,
+      "filter": [
+        "all",
+        [
+          "==",
+          [
+            "get",
+            "source_kind"
+          ],
+          "manual"
+        ],
+        [
+          "==",
+          [
+            "geometry-type"
+          ],
+          "LineString"
+        ],
+        [
+          "!=",
+          [
+            "coalesce",
+            [
+              "get",
+              "name"
+            ],
+            ""
+          ],
+          ""
+        ]
+      ],
+      "layout": {
+        "symbol-placement": "line",
+        "text-field": [
+          "get",
+          "name"
+        ],
+        "text-font": [
+          "sans-serif"
+        ],
+        "text-size": 11
+      },
+      "paint": {
+        "text-color": "#596675",
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1
+      }
+    },
+    {
+      "id": "base-buildings-3d",
+      "type": "fill-extrusion",
+      "source": "osm_base",
+      "source-layer": "building",
+      "minzoom": 15,
+      "layout": {
+        "visibility": "none"
+      },
+      "paint": {
+        "fill-extrusion-color": "#d5cec6",
+        "fill-extrusion-height": [
+          "coalesce",
+          [
+            "get",
+            "render_height"
+          ],
+          [
+            "get",
+            "height"
+          ],
+          8
+        ],
+        "fill-extrusion-base": [
+          "coalesce",
+          [
+            "get",
+            "render_min_height"
+          ],
+          0
+        ],
+        "fill-extrusion-opacity": 0.82
+      }
+    }
+  ]
+}

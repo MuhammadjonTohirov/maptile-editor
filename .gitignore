@@ -103,9 +103,16 @@ cover/
 *.backup
 
 # Map tiles and large data files
+.tile-build/
 tiles/*.mbtiles
+tiles/*.pmtiles
+tiles/*.pbf
+tiles/*.manifest.json
 data/
 *.pbf
+
+# Frontend build output
+frontend/assets/
 
 # Local configuration
 config.local.json

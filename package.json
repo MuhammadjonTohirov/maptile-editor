@@ -1,0 +1,19 @@
+{
+  "name": "maptile-editor",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild frontend/src/main.js --bundle --format=esm --target=es2022 --outfile=frontend/assets/app.js --loader:.css=css --minify --sourcemap && esbuild frontend/src/client.js --bundle --format=esm --target=es2022 --outfile=frontend/assets/client.js --loader:.css=css --minify --sourcemap",
+    "check:frontend": "node --check frontend/src/main.js && node --check frontend/src/client.js && node --check frontend/src/api.js && node --check frontend/src/geometry.js && node --check frontend/src/layers.js && node --check frontend/src/map-setup.js && node --check frontend/src/strings.js && node --check frontend/src/base-masks.js && node --check frontend/src/emoji-icons.js && node scripts/check-style.mjs"
+  },
+  "dependencies": {
+    "maplibre-gl": "5.12.0",
+    "terra-draw": "1.31.2",
+    "terra-draw-maplibre-gl-adapter": "1.4.1"
+  },
+  "devDependencies": {
+    "@maplibre/maplibre-gl-style-spec": "26.1.0",
+    "esbuild": "0.27.3"
+  }
+}

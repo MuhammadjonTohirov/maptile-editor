@@ -1,0 +1,67 @@
+// Every user-visible string the scripts create lives in this catalog
+// (rule F7), so translating the UI means replacing one module.
+const MESSAGES = {
+  basemapReady: 'Vector basemap ready',
+  mapError: 'Map error: {message}',
+  editingEnabled: 'Editing enabled. Select a basemap feature to create an editable local copy.',
+  editingDisabled: 'Editing disabled',
+  editingZoomHint: 'Editing enabled. Zoom in and viewport roads become editable automatically.',
+  enableEditing: 'Enable editing',
+  disableEditing: 'Disable editing',
+  roadsPrepared: '{count} roads in view are ready to edit.',
+  roadsPrepareFailed: 'Unable to prepare viewport roads for editing',
+  featureCreated: 'Feature created. Complete its details, then save changes.',
+  featureMissingSave: 'This feature no longer exists, so it cannot be saved. The overlay has been refreshed.',
+  featureMissingSelect: 'This feature was already deleted. The overlay has been refreshed.',
+  featureMissingDelete: 'Feature was already deleted.',
+  featureSaveFailed: 'Unable to save feature',
+  geometryNotReshapable: 'This geometry cannot be reshaped with the current drawing tools',
+  geometryNotEditable: 'This geometry cannot be edited with the current drawing tools',
+  baseCopySelected: 'Selected existing editable basemap copy.',
+  baseCopyGeometryFailed: 'This basemap geometry cannot be copied for editing',
+  baseCopyCreated: 'Editable copy created; it now replaces the basemap original on the map.',
+  baseCopyFailed: 'Unable to create an editable basemap copy',
+  nothingToUndo: 'Nothing to undo',
+  undoDone: 'Undid last change',
+  undoFailed: 'Unable to undo the last change',
+  duplicated: 'Feature duplicated; drag it into place.',
+  duplicateFailed: 'Unable to duplicate feature',
+  propertiesSaved: 'Properties saved',
+  propertiesSaveFailed: 'Unable to save properties',
+  baseObjectRemoved: 'Basemap object removed from the map.',
+  featureDeleted: 'Feature deleted',
+  deleteFailed: 'Unable to delete feature',
+  baseObjectRestored: 'Basemap object restored.',
+  restoreFailed: 'Unable to restore basemap object',
+  restore: 'Restore',
+  hiddenObjectsEmpty: 'None',
+  objectFallbackName: 'Object {id}',
+  searchMiss: 'No feature named “{query}”',
+  searchHit: 'Showing “{name}”',
+  importing: 'Importing…',
+  importFailed: 'Unable to import {kind}: {message}',
+  clearAllConfirm: 'Delete all editor features and imported overlays? Hidden basemap objects become visible again.',
+  cleared: 'Editor data cleared',
+  clearFailed: 'Unable to clear editor data',
+  geolocationUnsupported: 'Geolocation is not supported by this browser',
+  geolocationFailed: 'Unable to get your location',
+  threeDToggleTitle: 'Toggle 3D buildings',
+  typePoint: 'Point',
+  typePoi: 'Point of interest',
+  typeLine: 'Line',
+  typeRoad: 'Road',
+  typeWaterway: 'Waterway',
+  typeArea: 'Area',
+  typeBuilding: 'Building',
+  typeLanduse: 'Land-use area',
+  typeFeature: 'Feature',
+  featureMeta: '{type} feature',
+};
+
+export function t(key, params = {}) {
+  let message = MESSAGES[key] ?? key;
+  for (const [name, value] of Object.entries(params)) {
+    message = message.replaceAll(`{${name}}`, String(value));
+  }
+  return message;
+}

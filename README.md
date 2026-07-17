@@ -1,195 +1,121 @@
-# 🗺️ Map Editor - Self-Sufficient Map Server
+# Map Tile Editor
 
-A fully offline, self-hosted map service with feature editing capabilities built with FastAPI, PostgreSQL + PostGIS, OpenLayers, and TileServer GL.
+Self-hosted Uzbekistan map editor built with MapLibre GL JS, Martin, FastAPI,
+PostGIS, and an OpenMapTiles-compatible OSM vector archive.
 
-## 🚀 Quick Start
+## Architecture
 
-1. **Clone and Setup**
+```text
+Uzbekistan OSM PBF ── OpenMapTiles build ── osm_uzbekistan.mbtiles ─┐
+PostGIS editor features ────────────────────────────────────────────┼─ Martin ─ Nginx ─ MapLibre GL JS
+                                                                    └─ /tiles/base and /tiles/editor
+```
+
+The OSM basemap archive is read-only. With editing enabled, selecting a
+building, road, waterway, or POI creates an editable local PostGIS copy above
+the basemap; user-created data and explicitly imported OSM copies use the same
+overlay. The source MBTiles archive is never modified at runtime.
+
+## First run
+
+1. Build the deployment artifact. This is a release operation and requires
+   Docker, Docker Compose, Git, curl, more than 15 GB free disk, and more than
+   3 GB RAM.
+
    ```bash
-   git clone <repository-url>
-   cd map-tile-editor
+   ./scripts/build-uzbekistan-tiles.sh
    ```
 
-2. **Start Services**
+2. Start the stack.
+
    ```bash
-   docker-compose up -d
+   ./start.sh
    ```
 
-3. **Access Applications**
-   - Frontend Map Editor: http://localhost:3000
-   - Backend API: http://localhost:8000
-   - TileServer: http://localhost:8080
-   - Database: localhost:5432
+3. Open http://localhost:3000.
 
-## 📁 Project Structure
+The tile build script is pinned to an OpenMapTiles commit and writes
+`tiles/osm_uzbekistan.manifest.json` with the OSM PBF checksum and build date.
+Run it monthly to refresh the basemap. The PBF, MBTiles, and manifest are
+deployment artifacts and intentionally ignored by Git.
 
-```
-map-tile-editor/
-├── backend/              # FastAPI backend
-│   ├── main.py          # API endpoints
-│   ├── models.py        # Database models
-│   ├── schemas.py       # Pydantic schemas
-│   ├── database.py      # Database connection
-│   ├── requirements.txt # Python dependencies
-│   └── Dockerfile       # Backend container
-├── frontend/            # OpenLayers map editor
-│   ├── index.html       # Main HTML page
-│   ├── js/map-editor.js # Map editor JavaScript
-│   └── nginx.conf       # Nginx configuration
-├── db/                  # Database configuration
-│   └── init/01-init.sql # Database initialization
-├── tiles/               # Vector tiles directory
-│   ├── config.json      # TileServer configuration
-│   └── README.md        # Tiles setup guide
-└── docker-compose.yml   # Service orchestration
-```
+## Services
 
-## 🛠️ Technology Stack
+| Service | Address | Responsibility |
+| --- | --- | --- |
+| Frontend | http://localhost:3000 | MapLibre editor and same-origin tile proxy |
+| Client view | http://localhost:3000/client.html | Read-only map with all edits applied; auto-refreshes |
+| API | http://localhost:8000 | Feature CRUD and optional bounded Overpass imports |
+| Martin | internal only | Serves MBTiles basemap and PostGIS overlay tiles |
+| PostGIS | localhost:5434 (configurable) | Editor feature storage |
 
-| Component | Technology |
-|-----------|------------|
-| Frontend | OpenLayers 8.1.0 |
-| Backend API | FastAPI + Python 3.12 |
-| Database | PostgreSQL 15 + PostGIS 3.3 |
-| Tile Server | TileServer GL |
-| Container | Docker + Docker Compose |
-| Web Server | Nginx |
+The browser accesses vectors only through the frontend origin:
 
-## 🎯 Features
+- `/tiles/base/{z}/{x}/{y}` — immutable OpenMapTiles-compatible OSM base
+- `/tiles/editor/{z}/{x}/{y}` — dynamic editor overlay, reloaded after edits
 
-### Map Editor
-- ✅ Draw points, lines, and polygons
-- ✅ Edit existing features (modify geometry)
-- ✅ Select and delete features
-- ✅ Feature properties (name, description)
-- ✅ Save features to database
-- ✅ Load features from database
-- ✅ Clear all features
+Rendered tile geometry is clipped per tile and quantized, so selecting a
+feature always reloads its authoritative geometry from `/api/features/{id}`
+before reshaping. Coordinates handed to the drawing tools are normalized to
+nine decimal places, the precision Terra Draw accepts.
 
-### Backend API
-- ✅ RESTful API for feature CRUD operations
-- ✅ GeoJSON format support
-- ✅ PostGIS spatial database
-- ✅ Async database operations
-- ✅ CORS enabled for frontend
+The basemap archive itself is read-only. Editing a basemap object creates a
+local PostGIS copy that visually replaces the original: the original is
+filtered out of the base layers while the copy exists. Deleting the copy keeps
+an invisible tombstone row (`source_kind=base_tombstone`) so the object stays
+removed from the map; individual objects can be restored from the editor's
+"Hidden basemap objects" list, and clearing editor data restores everything.
 
-### Database
-- ✅ PostGIS spatial extensions
-- ✅ Feature storage with geometry and properties
-- ✅ Spatial indexing for performance
-- ✅ Automatic timestamps
+Editor tools: point/line/polygon/rectangle/circle drawing with vertex snapping
+to saved features, whole-feature drag plus rotate (Ctrl+R) and scale (Ctrl+S),
+duplicate, undo (Ctrl+Z), search-by-name with fly-to, and per-feature emoji
+icons, which appear only at street-level zooms. Name labels render in both the
+editor and the client view: point and polygon names at the feature's anchor,
+street and line names along the road line itself. Roads label only their real
+street title; unnamed roads carry no label.
 
-## 🗺️ Adding Map Tiles
+The current view (zoom, center, bearing, pitch) is kept in the URL fragment in
+both the editor and the client, so a location can be bookmarked, shared, or
+reloaded in place. Road widths scale exponentially with zoom past the base
+tiles' maxzoom (14) up to z20, per road class, so zoomed-in streets approach
+plausible ground widths instead of freezing at a few pixels.
 
-### Option 1: OpenMapTiles (Recommended)
-1. Visit [OpenMapTiles Downloads](https://openmaptiles.org/downloads/)
-2. Download desired region in `.mbtiles` format
-3. Place file in `tiles/` directory
-4. Restart TileServer: `docker-compose restart tileserver`
+## Data and attribution
 
-### Option 2: Generate Custom Tiles
-1. Download OSM data (.pbf format) from [Geofabrik](https://download.geofabrik.de/)
-2. Use [Tilemaker](https://github.com/systemed/tilemaker) to generate tiles
-3. Export as `.mbtiles` format
-4. Place in `tiles/` directory
+Attribution is visible in the map UI: `© OpenMapTiles © OpenStreetMap
+contributors`. The frontend bundles its MapLibre and drawing dependencies, and
+the map style uses local browser fonts, so no third-party map, tile, sprite, or
+font service is requested at runtime.
 
-## 🔧 Development
+## Development
 
-### Backend Development
+The architectural rules every change must follow are documented in
+[docs/architecture-rules.md](docs/architecture-rules.md).
+
 ```bash
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+npm ci
+npm run check:frontend   # syntax checks, style-spec validation, layer-id audit
+npm run build
+docker compose config
+docker compose exec backend python -m pytest tests -q   # backend unit tests
 ```
 
-### Database Access
-```bash
-# Connect to PostgreSQL
-psql -h localhost -U postgres -d mapdata
+After the archive has been built and the stack is running, verify its public
+routes with `./scripts/verify-stack.sh`.
 
-# View features
-SELECT id, name, ST_AsText(geometry) FROM features;
-```
+The backend is small, flat modules by responsibility: `main.py` assembles the
+app; `features_api.py` and `imports_api.py` hold the routes; `osm_import.py`
+is the shared import pipeline; `overpass.py` talks to Overpass and parses OSM
+tags; `serializers.py` converts rows to API shapes; `config.py` reads the
+environment. The frontend mirrors that: `main.js` orchestrates the editor
+using `api.js`, `geometry.js`, `layers.js`, `map-setup.js`, `strings.js`,
+`base-masks.js`, and `emoji-icons.js`; `client.js` reuses the same modules.
 
-### API Documentation
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+Database schema comes exclusively from the idempotent SQL files in
+`db/migrations/` (starting at `000_baseline.sql`). The Compose `migrations`
+job applies each one exactly once before the backend and Martin start — a
+fresh database needs nothing else. Existing database data is retained.
 
-## 📊 API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/features` | Get all features (GeoJSON) |
-| GET | `/features/{id}` | Get specific feature |
-| POST | `/features` | Create new feature |
-| PUT | `/features/{id}` | Update feature |
-| DELETE | `/features/{id}` | Delete feature |
-| GET | `/health` | Health check |
-
-## 🔒 Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | `postgresql+asyncpg://postgres:postgres@db:5432/mapdata` | Database connection |
-
-## 🚨 Troubleshooting
-
-### Common Issues
-
-1. **Database Connection Error**
-   ```bash
-   docker-compose logs db
-   docker-compose restart db
-   ```
-
-2. **TileServer Not Loading**
-   - Ensure `.mbtiles` files are in `tiles/` directory
-   - Check TileServer logs: `docker-compose logs tileserver`
-
-3. **Frontend API Errors**
-   - Check backend logs: `docker-compose logs backend`
-   - Verify CORS settings in `backend/main.py`
-
-### Reset Database
-```bash
-docker-compose down -v
-docker-compose up -d
-```
-
-## 🎨 Customization
-
-### Styling Features
-Edit `frontend/js/map-editor.js` - `getFeatureStyle()` method
-
-### Adding New Properties
-1. Update database schema in `db/init/01-init.sql`
-2. Update Pydantic schemas in `backend/schemas.py`
-3. Update frontend form in `frontend/index.html`
-
-### Custom Base Maps
-Replace OpenStreetMap with custom tiles in `frontend/js/map-editor.js`
-
-## 📈 Performance Tips
-
-1. **Large Datasets**: Implement pagination in API endpoints
-2. **Spatial Queries**: Use PostGIS spatial indexes
-3. **Frontend**: Consider clustering for many features
-4. **Tiles**: Use vector tiles for better performance
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create feature branch
-3. Make changes following SOLID/DRY principles
-4. Test thoroughly
-5. Submit pull request
-
-## 📄 License
-
-MIT License - see LICENSE file for details
-
----
-
-**Ready to edit maps!** 🎉
-
-Start with `docker-compose up -d` and visit http://localhost:3000
+PostGIS uses host port `5434` by default to avoid colliding with other local
+projects; containers continue to use `db:5432`. Set `POSTGRES_HOST_PORT` to
+choose another host port.

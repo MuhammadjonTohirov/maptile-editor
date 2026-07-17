@@ -1,18 +1,23 @@
-import os
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
+from typing import AsyncIterator
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@db:5432/mapdata")
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase
 
-engine = create_async_engine(DATABASE_URL, echo=True)
-async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+from config import DATABASE_URL, SQL_ECHO
 
-Base = declarative_base()
+engine = create_async_engine(DATABASE_URL, echo=SQL_ECHO)
+async_session = async_sessionmaker(engine, expire_on_commit=False)
 
-async def get_db():
+
+class Base(DeclarativeBase):
+    pass
+
+
+async def get_db() -> AsyncIterator[AsyncSession]:
+    """One session per request; any escaped exception rolls its work back (rule B4)."""
     async with async_session() as session:
         try:
             yield session
-        finally:
-            await session.close()
+        except Exception:
+            await session.rollback()
+            raise
