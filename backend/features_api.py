@@ -1,8 +1,8 @@
 """Feature CRUD endpoints (rule B1)."""
 import json
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from geoalchemy2.functions import ST_AsGeoJSON
 from geoalchemy2.shape import from_shape
 from shapely.geometry import shape
@@ -10,9 +10,11 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config import FEATURE_QUERY_LIMIT, FULL_BASE_THRESHOLD
 from database import get_db
 from models import Feature
 from schemas import (
+    AppMeta,
     FeatureCreate,
     FeatureResponse,
     FeatureUpdate,
@@ -23,6 +25,21 @@ from schemas import (
 from serializers import feature_response, geojson_query, row_to_geojson
 
 router = APIRouter()
+
+
+def _bbox_filter(bbox: str):
+    """west,south,east,north → a GIST-indexed ST_Intersects predicate (rule B6)."""
+    parts = bbox.split(",")
+    if len(parts) != 4:
+        raise HTTPException(status_code=422, detail="bbox must be 'west,south,east,north'")
+    try:
+        west, south, east, north = (float(part) for part in parts)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail="bbox values must be numbers") from error
+    if not (west < east and south < north):
+        raise HTTPException(status_code=422, detail="bbox must have west < east and south < north")
+    envelope = func.ST_MakeEnvelope(west, south, east, north, 4326)
+    return func.ST_Intersects(Feature.geometry, envelope)
 
 
 def _geometry_or_422(geometry: Dict[str, Any]):
@@ -41,8 +58,19 @@ def _conflict(error: IntegrityError) -> HTTPException:
 
 
 @router.get("/features", response_model=GeoJSONFeatureCollection)
-async def get_features(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(geojson_query())
+async def get_features(
+    bbox: Optional[str] = Query(default=None, description="west,south,east,north viewport filter"),
+    limit: Optional[int] = Query(default=None, ge=1, le=FEATURE_QUERY_LIMIT),
+    db: AsyncSession = Depends(get_db),
+):
+    # No bbox returns the full collection (small-data overlay mode); a bbox
+    # scopes the read to the viewport so a country-scale dataset stays cheap.
+    query = geojson_query()
+    if bbox is not None:
+        query = query.where(_bbox_filter(bbox))
+    if limit is not None:
+        query = query.limit(limit)
+    result = await db.execute(query)
     return GeoJSONFeatureCollection(features=[row_to_geojson(row) for row in result])
 
 
@@ -53,6 +81,32 @@ async def get_features_version(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(func.count(Feature.id), func.max(Feature.updated_at)))
     count, updated_at = result.one()
     return FeatureVersion(count=count, updated_at=updated_at)
+
+
+@router.get("/features/search", response_model=GeoJSONFeatureCollection)
+async def search_features(
+    q: str = Query(min_length=1, max_length=255),
+    limit: int = Query(default=20, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+):
+    """Name search runs in SQL so it scales past the browser's memory (rule B6).
+    Shorter names rank first, so an exact street name beats a long compound."""
+    query = (
+        geojson_query()
+        .where(Feature.name.ilike(f"%{q}%"))
+        .order_by(func.length(Feature.name))
+        .limit(limit)
+    )
+    result = await db.execute(query)
+    return GeoJSONFeatureCollection(features=[row_to_geojson(row) for row in result])
+
+
+@router.get("/meta", response_model=AppMeta)
+async def get_meta(db: AsyncSession = Depends(get_db)):
+    """Load-time mode hint: whether the dataset is large enough to render the
+    whole map from editor tiles instead of the small-data overlay."""
+    count = await db.scalar(select(func.count(Feature.id)))
+    return AppMeta(feature_count=count, full_base=count >= FULL_BASE_THRESHOLD)
 
 
 @router.get("/features/{feature_id}/businesses", response_model=GeoJSONFeatureCollection)

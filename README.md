@@ -39,6 +39,23 @@ The tile build script is pinned to an OpenMapTiles commit and writes
 Run it monthly to refresh the basemap. The PBF, MBTiles, and manifest are
 deployment artifacts and intentionally ignored by Git.
 
+### Load the whole country as editable data (optional)
+
+To edit anywhere without importing each area first, bulk-load the entire
+Uzbekistan OSM extract — buildings, roads, and street furniture — into the
+editor in one pass:
+
+```bash
+./scripts/load-uzbekistan-osm.sh
+```
+
+This is a heavy maintenance operation (a few GB of database growth and tens of
+minutes) run against the already-running stack; re-runs are idempotent. Pass
+`LOAD_BBOX="west south east north"` to load only a sub-region. Once the dataset
+is large enough, the editor and client render the whole map from editor tiles
+and every feature is directly editable — no per-area import or basemap copy.
+Refresh it monthly alongside the tile archive.
+
 ## Services
 
 | Service | Address | Responsibility |

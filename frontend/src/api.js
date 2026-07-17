@@ -38,7 +38,10 @@ async function request(path, { method = 'GET', body } = {}) {
 export const featuresApi = {
   list: () => request('/api/features'),
   version: () => request('/api/features/version'),
+  meta: () => request('/api/meta'),
   businesses: (buildingId) => request(`/api/features/${buildingId}/businesses`),
+  search: (query, limit = 20) => request(`/api/features/search?q=${encodeURIComponent(query)}&limit=${limit}`),
+  listInBounds: (bbox, limit) => request(`/api/features?bbox=${bbox}&limit=${limit}`),
   get: (id) => request(`/api/features/${id}`),
   create: (payload) => request('/api/features', { method: 'POST', body: payload }),
   update: (id, payload) => request(`/api/features/${id}`, { method: 'PUT', body: payload }),

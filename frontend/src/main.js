@@ -10,6 +10,12 @@ import {
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
 import { featuresApi, isMissing } from './api.js';
 import { captureBaseFilters, applyBaseFeatureMasks } from './base-masks.js';
+import {
+  addTileSymbolLayers,
+  paintEditorAsBasemap,
+  EDITOR_3D_LAYER,
+  TILE_SYMBOL_LAYERS,
+} from './basemap-render.js';
 import { enableEmojiIcons, featureAnchors } from './emoji-icons.js';
 import {
   collectVertices,
@@ -52,6 +58,13 @@ const BUSINESS_ICONS = {
   bank: '🏦', office: '🏢', other: '🏷️',
 };
 
+// Viewport reads for snapping stay well under the backend's cap so a query at
+// country scale can never return an unbounded set.
+const VIEWPORT_FEATURE_LIMIT = 2000;
+// Below this zoom individual features are neither editable nor worth fetching
+// for snapping; rendering is entirely from tiles.
+const EDIT_ZOOM = 15;
+
 const DRAW_MODE_BUTTONS = {
   point: 'draw-point',
   linestring: 'draw-line',
@@ -79,12 +92,15 @@ class MapEditor {
     this.map = null;
     this.draw = null;
     this.editingEnabled = false;
+    // Full base: the whole country is loaded as editor data, rendered from
+    // tiles with the basemap palette; there is no per-area import or base copy.
+    this.fullBase = false;
+    this.interactiveLayers = EDITOR_LAYERS;
     this.selected = null;
     this.editorRevision = 0;
     this.pendingBaseCopies = new Set();
     this.undoStack = [];
     this.snapVertices = [];
-    this.namedFeatures = [];
     this.preparedRoadAreas = [];
     this.preparingRoads = false;
     this.roadPrepareCooldown = 0;
@@ -117,6 +133,19 @@ class MapEditor {
 
     this.map.on('load', async () => {
       this.baseFilters = captureBaseFilters(this.map);
+      try {
+        this.fullBase = (await featuresApi.meta()).full_base;
+      } catch (error) {
+        console.error('Unable to read map metadata', error);
+      }
+      if (this.fullBase) {
+        // Render the country from editor tiles and hide the base OSM detail,
+        // so every feature is directly editable with no import or copy step.
+        paintEditorAsBasemap(this.map);
+        addTileSymbolLayers(this.map);
+        this.interactiveLayers = [...EDITOR_LAYERS, ...TILE_SYMBOL_LAYERS];
+        this.elements['toggle-imports'].checked = true;
+      }
       this.createDrawing();
       this.bindMapInteractions();
       this.updateZoom();
@@ -170,7 +199,7 @@ class MapEditor {
         [event.point.x - reach, event.point.y - reach],
         [event.point.x + reach, event.point.y + reach],
       ];
-      const rendered = this.map.queryRenderedFeatures(clickBox, { layers: EDITOR_LAYERS });
+      const rendered = this.map.queryRenderedFeatures(clickBox, { layers: this.interactiveLayers });
       if (rendered.length) {
         const featureId = rendered[0].id ?? rendered[0].properties?.id;
         // Clicks on a feature already under edit belong to Terra Draw's select
@@ -193,11 +222,18 @@ class MapEditor {
       this.clearSelection();
     });
     this.map.on('moveend', () => {
+      if (this.fullBase) {
+        // The whole country is already loaded; only the viewport's snapping
+        // targets need refreshing — no per-area import runs.
+        clearTimeout(this.viewportTimer);
+        this.viewportTimer = setTimeout(() => this.refreshEditorData(), 400);
+        return;
+      }
       if (!this.editingEnabled) return;
       clearTimeout(this.roadPrepareTimer);
       this.roadPrepareTimer = setTimeout(() => this.prepareViewportRoads(), 1500);
     });
-    EDITOR_LAYERS.forEach((layerId) => {
+    this.interactiveLayers.forEach((layerId) => {
       this.map.on('mouseenter', layerId, () => { this.map.getCanvas().style.cursor = 'pointer'; });
       this.map.on('mouseleave', layerId, () => { this.map.getCanvas().style.cursor = ''; });
     });
@@ -222,6 +258,12 @@ class MapEditor {
     this.elements['duplicate-feature'].addEventListener('click', () => this.duplicateSelected());
     this.elements['delete-feature'].addEventListener('click', () => this.deleteSelected());
     this.elements['feature-search'].addEventListener('change', (event) => this.jumpToFeature(event.target.value));
+    this.elements['feature-search'].addEventListener('input', (event) => {
+      clearTimeout(this.searchTimer);
+      const query = event.target.value.trim();
+      if (query.length < 2) return;
+      this.searchTimer = setTimeout(() => this.populateSearchOptions(query), 250);
+    });
     document.addEventListener('keydown', (event) => {
       if (!(event.key === 'z' && (event.ctrlKey || event.metaKey))) return;
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
@@ -238,7 +280,9 @@ class MapEditor {
     });
     this.elements['toggle-imports'].addEventListener('change', (event) => this.setImportedLayerVisibility(event.target.checked));
     this.elements['toggle-3d'].addEventListener('change', (event) => {
-      setLayerVisibility(this.map, ['base-buildings-3d'], event.target.checked);
+      // Full base extrudes editor buildings; overlay extrudes the base tiles.
+      const layer = this.fullBase ? EDITOR_3D_LAYER : 'base-buildings-3d';
+      setLayerVisibility(this.map, [layer], event.target.checked);
     });
     this.elements['clear-all'].addEventListener('click', () => this.clearAll());
     this.elements['my-location'].addEventListener('click', () => this.goToUserLocation());
@@ -874,6 +918,7 @@ class MapEditor {
   }
 
   async refreshEditorData() {
+    if (this.fullBase) return this.refreshViewportData();
     try {
       const collection = await featuresApi.list();
       const visible = collection.features.filter((feature) => feature.properties?.source_kind !== 'base_tombstone');
@@ -881,18 +926,36 @@ class MapEditor {
       applyBaseFeatureMasks(this.map, this.baseFilters, collection.features);
       this.map.getSource('editor_anchors')?.setData(featureAnchors(collection.features));
       this.snapVertices = collectVertices(visible);
-      this.namedFeatures = visible.filter((feature) => feature.properties?.name);
-      this.elements['feature-search-options'].replaceChildren(
-        ...[...new Set(this.namedFeatures.map((feature) => feature.properties.name))]
-          .slice(0, 50)
-          .map((name) => new Option(name)),
-      );
       this.renderHiddenObjects(
         collection.features.filter((feature) => feature.properties?.source_kind === 'base_tombstone'),
       );
     } catch (error) {
       console.error('Unable to load editor data', error);
       this.elements['feature-count'].textContent = '—';
+    }
+  }
+
+  // Country scale: render from tiles, and fetch only the viewport's features
+  // for snapping, and only when zoomed in enough to edit them (rule F4).
+  async refreshViewportData() {
+    try {
+      this.elements['feature-count'].textContent = (await featuresApi.meta()).feature_count;
+    } catch (error) {
+      console.error('Unable to read feature count', error);
+    }
+    if (this.map.getZoom() < EDIT_ZOOM) {
+      this.snapVertices = [];
+      return;
+    }
+    try {
+      const bounds = this.map.getBounds();
+      const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(',');
+      const collection = await featuresApi.listInBounds(bbox, VIEWPORT_FEATURE_LIMIT);
+      const visible = collection.features.filter((feature) => feature.properties?.source_kind !== 'base_tombstone');
+      this.snapVertices = collectVertices(visible);
+    } catch (error) {
+      console.error('Unable to load viewport features', error);
+      this.snapVertices = [];
     }
   }
 
@@ -935,13 +998,21 @@ class MapEditor {
     }
   }
 
-  jumpToFeature(query) {
-    const needle = query.trim().toLowerCase();
+  // Search runs in SQL (rule B6) so it works identically over a handful of
+  // edits or the whole country without holding every name in the browser.
+  async jumpToFeature(query) {
+    const needle = query.trim();
     if (!needle) return;
-    const feature = this.namedFeatures.find((candidate) => candidate.properties.name.toLowerCase() === needle)
-      || this.namedFeatures.find((candidate) => candidate.properties.name.toLowerCase().includes(needle));
+    let feature;
+    try {
+      feature = (await featuresApi.search(needle, 1)).features[0];
+    } catch (error) {
+      console.error('Unable to search features', error);
+      this.setStatus(t('searchMiss', { query: needle }), true);
+      return;
+    }
     if (!feature) {
-      this.setStatus(t('searchMiss', { query: query.trim() }), true);
+      this.setStatus(t('searchMiss', { query: needle }), true);
       return;
     }
     if (feature.geometry.type === 'Point') {
@@ -950,6 +1021,16 @@ class MapEditor {
       this.map.fitBounds(geometryBounds(feature.geometry), { padding: 80, maxZoom: 18, essential: true });
     }
     this.setStatus(t('searchHit', { name: feature.properties.name }));
+  }
+
+  async populateSearchOptions(query) {
+    try {
+      const collection = await featuresApi.search(query, 8);
+      const names = [...new Set(collection.features.map((feature) => feature.properties?.name).filter(Boolean))];
+      this.elements['feature-search-options'].replaceChildren(...names.map((name) => new Option(name)));
+    } catch (error) {
+      // Type-ahead is best-effort; a failed lookup just shows no suggestions.
+    }
   }
 
   snapToEditorVertex(event) {

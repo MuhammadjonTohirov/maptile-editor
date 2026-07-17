@@ -1,7 +1,7 @@
 // MapLibre cannot render emoji through its glyph pipeline, so style layers
 // reference them as `emoji:<char>` images and each one is drawn onto a canvas
 // the first time the renderer requests it.
-const EMOJI_IMAGE_PREFIX = 'emoji:';
+export const EMOJI_IMAGE_PREFIX = 'emoji:';
 
 // Tiled geometry is clipped per tile, and a symbol layer on it places one
 // symbol per fragment. Icons and name labels therefore render from a

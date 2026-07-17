@@ -89,6 +89,15 @@ class FeatureVersion(BaseModel):
     updated_at: Optional[datetime]
 
 
+class AppMeta(BaseModel):
+    """One-shot mode hint read by the client at load."""
+
+    feature_count: int
+    # True once the dataset is large enough to render the whole map from
+    # editor tiles instead of the small-data basemap overlay.
+    full_base: bool
+
+
 class BoundsRequest(BaseModel):
     west: float
     south: float

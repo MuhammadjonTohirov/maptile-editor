@@ -107,8 +107,13 @@ commit with the reason.
 - **F4 — Tile geometry is never edited or persisted.** Reshaping always
   starts from `/api/features/{id}`; geometry entering Terra Draw is
   normalized to single-part types at 9-decimal precision
-  (`normalizeGeometry`). Symbols/labels render from one anchor point per
-  feature, never from tiled geometry.
+  (`normalizeGeometry`). In the small-data overlay, symbols/labels render
+  from one anchor point per feature (never tiled geometry) so a symbol is not
+  duplicated per tile. In full-base mode that GeoJSON anchor source cannot
+  hold a country of features, so icons and point labels render from the
+  editor tiles instead — points occupy a single tile so they do not
+  duplicate, and polygon/line name labels keep using the tile-safe paths
+  (line-placed road labels; polygon labels are omitted at that scale).
 - **F5 — Form state is explicit.** Selecting a feature populates the property
   form; clearing the selection resets it. A new drawing must never inherit
   values left over from a previously selected feature.

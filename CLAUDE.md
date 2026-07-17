@@ -25,7 +25,8 @@ PostGIS (host :5434; internal :5432)
 - `frontend/client.html` (`src/client.js`) is a read-only viewer that polls
   the lightweight `/api/features/version` change stamp and reloads feature
   data and editor tiles only when an edit actually happened, so an idle map
-  never repaints. It hides all basemap detail
+  never repaints. In full-base mode it skips the whole-collection fetch and
+  draws icons/labels straight from the editor tiles. It hides all basemap detail
   layers (buildings, roads, waterways, POIs, road labels) — the basemap only
   provides context (terrain, water, boundaries, place names) and every detail
   object comes from editor data, restyled with the basemap palette.
@@ -113,6 +114,22 @@ backend is volume-mounted and reloads on save.
   stored properties before sending.
 - Optional OSM imports are bounded to a small viewport and are upserted using
   OSM type and ID. Imported features are marked `source_kind=osm_import`.
+- `scripts/load-uzbekistan-osm.sh` bulk-loads the entire country's OSM
+  buildings, roads, and street furniture into the features table in one pass
+  (GDAL stages the PBF, `load-uzbekistan-osm.sql` transforms it with the same
+  mapping as the per-area importer, ON CONFLICT on OSM identity keeps it
+  idempotent). It is a heavy maintenance operation like the tile build, run
+  against the running stack. `LOAD_BBOX="w s e n"` loads a sub-region.
+- Once the dataset crosses `FULL_BASE_THRESHOLD` (default 50 000 features)
+  `/api/meta` reports `full_base`, and both the editor and client switch to
+  full-base rendering: base OSM detail is hidden and the whole map is drawn
+  from editor tiles with the basemap palette (`frontend/src/basemap-render.js`,
+  shared by both). In this mode the editor scopes its per-feature reads to the
+  viewport (`/api/features?bbox=`, for snapping, only at zoom ≥ 15), searches
+  server-side (`/api/features/search`), and does no per-area import or base
+  copy — every feature is edited directly. Below the threshold the small-data
+  overlay (base detail visible, full-list masks/snap, base-copy workflow) is
+  used unchanged.
 - While editing at zoom ≥ 15, viewport roads are imported automatically
   (`prepareViewportRoads`) so every road is a tappable editor feature with its
   full OSM geometry — base road tiles are fragmented per tile and too thin to
