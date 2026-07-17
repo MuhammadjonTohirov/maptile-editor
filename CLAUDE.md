@@ -46,7 +46,11 @@ PostGIS (host :5434; internal :5432)
   client; throws `ApiError` with status), `geometry.js`, `layers.js`
   (layer-id lists + guarded visibility helper), `map-setup.js`,
   `strings.js` (all user-visible copy, `t(key, params)`), `emoji-icons.js`,
-  and `base-masks.js`.
+  and `base-masks.js`. `strings.js` resolves the locale (`?lang=` → saved
+  choice → browser language → English) against the catalogs in
+  `frontend/src/locales/{en,uz,ru}.js` and applies `data-i18n` markup via
+  `localizeDocument()`; `npm run check:frontend` enforces key and
+  placeholder parity across catalogs.
 
 ## First run
 

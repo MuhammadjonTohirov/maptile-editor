@@ -3,123 +3,128 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Self-hosted Uzbekistan vector map editor">
-  <title>Map Tile Editor</title>
+  <meta name="description" content="Self-hosted Uzbekistan vector map editor" data-i18n-content="appDescription">
+  <title data-i18n="appTitle">Map Tile Editor</title>
   <link rel="stylesheet" href="/assets/app.css">
 </head>
 <body>
-  <main id="map" aria-label="Vector map editor"></main>
+  <main id="map" aria-label="Vector map editor" data-i18n-aria-label="mapAriaLabel"></main>
 
-  <aside class="panel controls" aria-label="Map controls">
+  <aside class="panel controls" aria-label="Map controls" data-i18n-aria-label="controlsAriaLabel">
     <div class="panel-heading">
-      <p class="eyebrow">Self-hosted vector map</p>
-      <h1>Map Editor</h1>
-      <p id="status" class="status">Loading map…</p>
+      <p class="eyebrow" data-i18n="panelEyebrow">Self-hosted vector map</p>
+      <h1 data-i18n="panelHeading">Map Editor</h1>
+      <p id="status" class="status" data-i18n="statusLoading">Loading map…</p>
     </div>
 
     <section>
-      <h2>Editing</h2>
+      <h2 data-i18n="sectionEditing">Editing</h2>
       <div class="button-grid">
-        <button id="toggle-editing" class="primary" type="button">Enable editing</button>
-        <button id="draw-point" type="button" disabled>Point</button>
-        <button id="draw-line" type="button" disabled>Line</button>
-        <button id="draw-polygon" type="button" disabled>Polygon</button>
-        <button id="draw-rect" type="button" disabled>Rectangle</button>
-        <button id="draw-circle" type="button" disabled>Circle</button>
-        <button id="select" type="button" disabled>Select / edit</button>
-        <button id="undo-edit" type="button" disabled>Undo</button>
-        <button id="duplicate-feature" type="button" disabled>Duplicate</button>
-        <button id="delete-feature" class="danger" type="button" disabled>Delete selected</button>
+        <button id="toggle-editing" class="primary" type="button" data-i18n="enableEditing">Enable editing</button>
+        <button id="draw-point" type="button" disabled data-i18n="drawPoint">Point</button>
+        <button id="draw-line" type="button" disabled data-i18n="drawLine">Line</button>
+        <button id="draw-polygon" type="button" disabled data-i18n="drawPolygon">Polygon</button>
+        <button id="draw-rect" type="button" disabled data-i18n="drawRect">Rectangle</button>
+        <button id="draw-circle" type="button" disabled data-i18n="drawCircle">Circle</button>
+        <button id="select" type="button" disabled data-i18n="selectEdit">Select / edit</button>
+        <button id="undo-edit" type="button" disabled data-i18n="undo">Undo</button>
+        <button id="duplicate-feature" type="button" disabled data-i18n="duplicate">Duplicate</button>
+        <button id="delete-feature" class="danger" type="button" disabled data-i18n="deleteSelected">Delete selected</button>
       </div>
     </section>
 
     <section>
-      <h2>Find feature</h2>
-      <input id="feature-search" list="feature-search-options" type="text" placeholder="Search by name…" autocomplete="off">
+      <h2 data-i18n="sectionFind">Find feature</h2>
+      <input id="feature-search" list="feature-search-options" type="text" placeholder="Search by name…" data-i18n-placeholder="searchPlaceholder" autocomplete="off">
       <datalist id="feature-search-options"></datalist>
     </section>
 
     <section>
-      <h2>Layers</h2>
-      <label class="switch"><input id="toggle-imports" type="checkbox"><span>Imported OSM overlay</span></label>
-      <label class="switch"><input id="toggle-3d" type="checkbox"><span>3D buildings</span></label>
+      <h2 data-i18n="sectionLayers">Layers</h2>
+      <label class="switch"><input id="toggle-imports" type="checkbox"><span data-i18n="importedOverlay">Imported OSM overlay</span></label>
+      <label class="switch"><input id="toggle-3d" type="checkbox"><span data-i18n="threeDBuildings">3D buildings</span></label>
     </section>
 
     <section>
-      <h2>Data</h2>
+      <h2 data-i18n="sectionData">Data</h2>
       <div class="button-grid">
-        <button id="load-buildings" type="button">Import buildings</button>
-        <button id="load-roads" type="button">Import roads</button>
-        <button id="load-streetlights" type="button">Import street lights</button>
-        <button id="load-traffic-lights" type="button">Import traffic lights</button>
-        <button id="clear-all" class="danger" type="button">Clear editor data</button>
-        <button id="my-location" type="button">My location</button>
+        <button id="load-buildings" type="button" data-i18n="importBuildings">Import buildings</button>
+        <button id="load-roads" type="button" data-i18n="importRoads">Import roads</button>
+        <button id="load-streetlights" type="button" data-i18n="importStreetlights">Import street lights</button>
+        <button id="load-traffic-lights" type="button" data-i18n="importTrafficLights">Import traffic lights</button>
+        <button id="clear-all" class="danger" type="button" data-i18n="clearEditorData">Clear editor data</button>
+        <button id="my-location" type="button" data-i18n="myLocation">My location</button>
       </div>
     </section>
 
     <section>
-      <h2>Hidden basemap objects</h2>
-      <ul id="hidden-objects" class="hidden-objects"><li class="empty">None</li></ul>
+      <h2 data-i18n="sectionHidden">Hidden basemap objects</h2>
+      <ul id="hidden-objects" class="hidden-objects"><li class="empty" data-i18n="hiddenObjectsEmpty">None</li></ul>
     </section>
 
     <footer>
-      <span>Zoom <strong id="zoom-level">0</strong></span>
-      <span>Editor features <strong id="feature-count">0</strong></span>
-      <a href="/client.html" target="_blank" rel="noopener">Client view</a>
+      <span><span data-i18n="zoomLabel">Zoom</span> <strong id="zoom-level">0</strong></span>
+      <span><span data-i18n="featureCountLabel">Editor features</span> <strong id="feature-count">0</strong></span>
+      <a href="/client.html" target="_blank" rel="noopener" data-i18n="clientViewLink">Client view</a>
+      <span class="lang-switch" role="group" aria-label="Interface language" data-i18n-aria-label="languageAria">
+        <button type="button" data-locale="uz">UZ</button>
+        <button type="button" data-locale="ru">RU</button>
+        <button type="button" data-locale="en">EN</button>
+      </span>
     </footer>
   </aside>
 
-  <aside id="feature-panel" class="panel feature-panel" hidden aria-label="Feature properties">
+  <aside id="feature-panel" class="panel feature-panel" hidden aria-label="Feature properties" data-i18n-aria-label="featurePanelAria">
     <div class="panel-heading inline-heading">
       <div>
-        <p class="eyebrow">Editor feature</p>
-        <h2>Properties</h2>
+        <p class="eyebrow" data-i18n="featureEyebrow">Editor feature</p>
+        <h2 data-i18n="propertiesHeading">Properties</h2>
       </div>
-      <button id="close-feature" class="icon-button" type="button" aria-label="Close properties">×</button>
+      <button id="close-feature" class="icon-button" type="button" aria-label="Close properties" data-i18n-aria-label="closeProperties">×</button>
     </div>
     <p id="feature-geometry" class="feature-meta"></p>
-    <label>Name<input id="feature-name" type="text" autocomplete="off"></label>
-    <label>Description<textarea id="feature-description" rows="3"></textarea></label>
-    <label>Icon / emoji<input id="feature-icon" type="text" maxlength="8" placeholder="🏠, 🏥, ⛽ …" autocomplete="off"></label>
-    <div id="icon-presets" class="icon-presets" aria-label="Quick icons">
+    <label><span data-i18n="labelName">Name</span><input id="feature-name" type="text" autocomplete="off"></label>
+    <label><span data-i18n="labelDescription">Description</span><textarea id="feature-description" rows="3"></textarea></label>
+    <label><span data-i18n="labelIcon">Icon / emoji</span><input id="feature-icon" type="text" maxlength="8" placeholder="🏠, 🏥, ⛽ …" autocomplete="off"></label>
+    <div id="icon-presets" class="icon-presets" aria-label="Quick icons" data-i18n-aria-label="quickIconsAria">
       <button type="button">🏠</button><button type="button">🏢</button><button type="button">🏥</button><button type="button">🏫</button>
       <button type="button">🏪</button><button type="button">🍽️</button><button type="button">☕</button><button type="button">⛽</button>
       <button type="button">🅿️</button><button type="button">🕌</button><button type="button">🌳</button><button type="button">⚽</button>
-      <button type="button">💡</button><button type="button">🚦</button><button type="button" data-clear aria-label="No icon">✕</button>
+      <button type="button">💡</button><button type="button">🚦</button><button type="button" data-clear aria-label="No icon" data-i18n-aria-label="noIconAria">✕</button>
     </div>
-    <label id="feature-type-label">Feature type<select id="feature-type"></select></label>
+    <label id="feature-type-label"><span data-i18n="labelFeatureType">Feature type</span><select id="feature-type"></select></label>
     <div id="building-fields" class="property-group" hidden>
-      <label>Building type
+      <label><span data-i18n="labelBuildingType">Building type</span>
         <select id="building-type">
-          <option value="">Unspecified</option>
-          <option value="residential">Residential</option>
-          <option value="commercial">Commercial</option>
-          <option value="industrial">Industrial</option>
-          <option value="office">Office</option>
-          <option value="retail">Retail</option>
-          <option value="warehouse">Warehouse</option>
+          <option value="" data-i18n="optionUnspecified">Unspecified</option>
+          <option value="residential" data-i18n="buildingResidential">Residential</option>
+          <option value="commercial" data-i18n="buildingCommercial">Commercial</option>
+          <option value="industrial" data-i18n="buildingIndustrial">Industrial</option>
+          <option value="office" data-i18n="buildingOffice">Office</option>
+          <option value="retail" data-i18n="buildingRetail">Retail</option>
+          <option value="warehouse" data-i18n="buildingWarehouse">Warehouse</option>
         </select>
       </label>
-      <label>Building number<input id="building-number" type="text" autocomplete="off"></label>
+      <label><span data-i18n="labelBuildingNumber">Building number</span><input id="building-number" type="text" autocomplete="off"></label>
     </div>
     <div id="road-fields" class="property-group" hidden>
-      <label>Road class<input id="road-type" type="text" placeholder="residential, primary…" autocomplete="off"></label>
-      <label>Direction
+      <label><span data-i18n="labelRoadClass">Road class</span><input id="road-type" type="text" placeholder="residential, primary…" data-i18n-placeholder="roadClassPlaceholder" autocomplete="off"></label>
+      <label><span data-i18n="labelDirection">Direction</span>
         <select id="road-direction">
-          <option value="">Unspecified</option>
-          <option value="bidirectional">Bidirectional</option>
-          <option value="oneway">One way</option>
-          <option value="oneway_reverse">One way (reverse)</option>
+          <option value="" data-i18n="optionUnspecified">Unspecified</option>
+          <option value="bidirectional" data-i18n="directionBidirectional">Bidirectional</option>
+          <option value="oneway" data-i18n="directionOneway">One way</option>
+          <option value="oneway_reverse" data-i18n="directionOnewayReverse">One way (reverse)</option>
         </select>
       </label>
       <div class="field-pair">
-        <label>Lanes<input id="lane-count" type="number" min="1" step="1"></label>
-        <label>Max speed<input id="max-speed" type="number" min="1" step="1"></label>
+        <label><span data-i18n="labelLanes">Lanes</span><input id="lane-count" type="number" min="1" step="1"></label>
+        <label><span data-i18n="labelMaxSpeed">Max speed</span><input id="max-speed" type="number" min="1" step="1"></label>
       </div>
-      <label>Surface<input id="road-surface" type="text" placeholder="asphalt, gravel…" autocomplete="off"></label>
+      <label><span data-i18n="labelSurface">Surface</span><input id="road-surface" type="text" placeholder="asphalt, gravel…" data-i18n-placeholder="surfacePlaceholder" autocomplete="off"></label>
     </div>
-    <p class="form-hint">New shapes are saved immediately. Change details or geometry, then save again.</p>
-    <button id="save-feature" class="primary" type="button">Save properties</button>
+    <p class="form-hint" data-i18n="formHint">New shapes are saved immediately. Change details or geometry, then save again.</p>
+    <button id="save-feature" class="primary" type="button" data-i18n="saveProperties">Save properties</button>
   </aside>
 
   <script type="module" src="/assets/app.js"></script>

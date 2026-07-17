@@ -3,7 +3,9 @@ import { featuresApi } from './api.js';
 import { enableEmojiIcons, featureAnchors } from './emoji-icons.js';
 import { BASE_DETAIL_LAYERS, IMPORT_LAYERS, setLayerVisibility } from './layers.js';
 import { createMap, addBaseControls } from './map-setup.js';
-import { t } from './strings.js';
+import { localizeDocument, t } from './strings.js';
+
+localizeDocument();
 
 const REFRESH_INTERVAL_MS = 15_000;
 

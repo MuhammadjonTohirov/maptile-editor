@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "esbuild frontend/src/main.js --bundle --format=esm --target=es2022 --outfile=frontend/assets/app.js --loader:.css=css --minify --sourcemap && esbuild frontend/src/client.js --bundle --format=esm --target=es2022 --outfile=frontend/assets/client.js --loader:.css=css --minify --sourcemap",
-    "check:frontend": "node --check frontend/src/main.js && node --check frontend/src/client.js && node --check frontend/src/api.js && node --check frontend/src/geometry.js && node --check frontend/src/layers.js && node --check frontend/src/map-setup.js && node --check frontend/src/strings.js && node --check frontend/src/base-masks.js && node --check frontend/src/emoji-icons.js && node scripts/check-style.mjs"
+    "check:frontend": "node --check frontend/src/main.js && node --check frontend/src/client.js && node --check frontend/src/api.js && node --check frontend/src/geometry.js && node --check frontend/src/layers.js && node --check frontend/src/map-setup.js && node --check frontend/src/strings.js && node --check frontend/src/base-masks.js && node --check frontend/src/emoji-icons.js && node --check frontend/src/locales/en.js && node --check frontend/src/locales/uz.js && node --check frontend/src/locales/ru.js && node scripts/check-locales.mjs && node scripts/check-style.mjs"
   },
   "dependencies": {
     "maplibre-gl": "5.12.0",

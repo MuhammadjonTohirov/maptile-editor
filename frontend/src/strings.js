@@ -1,67 +1,97 @@
-// Every user-visible string the scripts create lives in this catalog
-// (rule F7), so translating the UI means replacing one module.
-const MESSAGES = {
-  basemapReady: 'Vector basemap ready',
-  mapError: 'Map error: {message}',
-  editingEnabled: 'Editing enabled. Select a basemap feature to create an editable local copy.',
-  editingDisabled: 'Editing disabled',
-  editingZoomHint: 'Editing enabled. Zoom in and viewport roads become editable automatically.',
-  enableEditing: 'Enable editing',
-  disableEditing: 'Disable editing',
-  roadsPrepared: '{count} roads in view are ready to edit.',
-  roadsPrepareFailed: 'Unable to prepare viewport roads for editing',
-  featureCreated: 'Feature created. Complete its details, then save changes.',
-  featureMissingSave: 'This feature no longer exists, so it cannot be saved. The overlay has been refreshed.',
-  featureMissingSelect: 'This feature was already deleted. The overlay has been refreshed.',
-  featureMissingDelete: 'Feature was already deleted.',
-  featureSaveFailed: 'Unable to save feature',
-  geometryNotReshapable: 'This geometry cannot be reshaped with the current drawing tools',
-  geometryNotEditable: 'This geometry cannot be edited with the current drawing tools',
-  baseCopySelected: 'Selected existing editable basemap copy.',
-  baseCopyGeometryFailed: 'This basemap geometry cannot be copied for editing',
-  baseCopyCreated: 'Editable copy created; it now replaces the basemap original on the map.',
-  baseCopyFailed: 'Unable to create an editable basemap copy',
-  nothingToUndo: 'Nothing to undo',
-  undoDone: 'Undid last change',
-  undoFailed: 'Unable to undo the last change',
-  duplicated: 'Feature duplicated; drag it into place.',
-  duplicateFailed: 'Unable to duplicate feature',
-  propertiesSaved: 'Properties saved',
-  propertiesSaveFailed: 'Unable to save properties',
-  baseObjectRemoved: 'Basemap object removed from the map.',
-  featureDeleted: 'Feature deleted',
-  deleteFailed: 'Unable to delete feature',
-  baseObjectRestored: 'Basemap object restored.',
-  restoreFailed: 'Unable to restore basemap object',
-  restore: 'Restore',
-  hiddenObjectsEmpty: 'None',
-  objectFallbackName: 'Object {id}',
-  searchMiss: 'No feature named “{query}”',
-  searchHit: 'Showing “{name}”',
-  importing: 'Importing…',
-  importFailed: 'Unable to import {kind}: {message}',
-  clearAllConfirm: 'Delete all editor features and imported overlays? Hidden basemap objects become visible again.',
-  cleared: 'Editor data cleared',
-  clearFailed: 'Unable to clear editor data',
-  geolocationUnsupported: 'Geolocation is not supported by this browser',
-  geolocationFailed: 'Unable to get your location',
-  threeDToggleTitle: 'Toggle 3D buildings',
-  typePoint: 'Point',
-  typePoi: 'Point of interest',
-  typeLine: 'Line',
-  typeRoad: 'Road',
-  typeWaterway: 'Waterway',
-  typeArea: 'Area',
-  typeBuilding: 'Building',
-  typeLanduse: 'Land-use area',
-  typeFeature: 'Feature',
-  featureMeta: '{type} feature',
-};
+// Locale-aware string catalog (rule F7). Every user-visible string lives in
+// one catalog per language under locales/; English is the reference and the
+// fallback for any missing key.
+import en from './locales/en.js';
+import ru from './locales/ru.js';
+import uz from './locales/uz.js';
+
+export const LOCALES = { uz, ru, en };
+const STORAGE_KEY = 'maptile-locale';
+
+// localStorage throws in some private-browsing modes; the app must still run.
+function savedLocale() {
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function rememberLocale(code) {
+  try {
+    localStorage.setItem(STORAGE_KEY, code);
+  } catch {
+    // The choice simply won't persist.
+  }
+}
+
+// ?lang= override (also persisted) → saved choice → browser language → English.
+function resolveLocale() {
+  const requested = new URLSearchParams(window.location.search).get('lang');
+  if (requested && Object.hasOwn(LOCALES, requested)) {
+    rememberLocale(requested);
+    return requested;
+  }
+  const saved = savedLocale();
+  if (saved && Object.hasOwn(LOCALES, saved)) return saved;
+  for (const language of navigator.languages ?? [navigator.language]) {
+    const code = (language ?? '').slice(0, 2).toLowerCase();
+    if (Object.hasOwn(LOCALES, code)) return code;
+  }
+  return 'en';
+}
+
+const locale = resolveLocale();
+document.documentElement.lang = locale;
+
+export function currentLocale() {
+  return locale;
+}
+
+// The view lives in the URL hash, so reloading re-renders the same map view
+// in the new language. A stale ?lang= override is dropped so the saved
+// choice wins on the next load.
+export function setLocale(code) {
+  if (!Object.hasOwn(LOCALES, code) || code === locale) return;
+  rememberLocale(code);
+  const url = new URL(window.location.href);
+  url.searchParams.delete('lang');
+  window.location.replace(url);
+}
 
 export function t(key, params = {}) {
-  let message = MESSAGES[key] ?? key;
+  let message = LOCALES[locale][key] ?? en[key] ?? key;
   for (const [name, value] of Object.entries(params)) {
     message = message.replaceAll(`{${name}}`, String(value));
   }
   return message;
+}
+
+// Applies the catalog to static markup: data-i18n replaces an element's text,
+// data-i18n-<attribute> variants set the named attribute.
+const ATTRIBUTE_MARKERS = {
+  'data-i18n-placeholder': 'placeholder',
+  'data-i18n-title': 'title',
+  'data-i18n-aria-label': 'aria-label',
+  'data-i18n-content': 'content',
+};
+
+export function localizeDocument(root = document) {
+  for (const element of root.querySelectorAll('[data-i18n]')) {
+    element.textContent = t(element.getAttribute('data-i18n'));
+  }
+  for (const [marker, attribute] of Object.entries(ATTRIBUTE_MARKERS)) {
+    for (const element of root.querySelectorAll(`[${marker}]`)) {
+      element.setAttribute(attribute, t(element.getAttribute(marker)));
+    }
+  }
+}
+
+// Overrides for the strings MapLibre's built-in controls render themselves.
+export function mapLibreLocale() {
+  return {
+    'NavigationControl.ZoomIn': t('mapZoomIn'),
+    'NavigationControl.ZoomOut': t('mapZoomOut'),
+    'NavigationControl.ResetBearing': t('mapResetBearing'),
+  };
 }

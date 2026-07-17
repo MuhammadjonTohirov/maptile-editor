@@ -25,7 +25,15 @@ import {
   setLayerVisibility,
 } from './layers.js';
 import { createMap, addBaseControls } from './map-setup.js';
-import { t } from './strings.js';
+import { currentLocale, localizeDocument, setLocale, t } from './strings.js';
+
+// Catalog keys naming each OSM import kind, for localized import errors.
+const IMPORT_KIND_KEYS = {
+  buildings: 'kindBuildings',
+  roads: 'kindRoads',
+  streetlights: 'kindStreetlights',
+  'traffic-lights': 'kindTrafficLights',
+};
 import './app.css';
 
 // Feature columns are canonical on the server; the JSONB properties blob only
@@ -872,7 +880,7 @@ class MapEditor {
       this.setStatus(result.message);
     } catch (error) {
       console.error(`Unable to import ${kind}`, error);
-      this.setStatus(t('importFailed', { kind: kind.replace('-', ' '), message: error.message }), true);
+      this.setStatus(t('importFailed', { kind: t(IMPORT_KIND_KEYS[kind] ?? kind), message: error.message }), true);
     } finally {
       button.textContent = original;
       button.disabled = false;
@@ -916,4 +924,9 @@ class MapEditor {
   }
 }
 
+localizeDocument();
+for (const button of document.querySelectorAll('.lang-switch [data-locale]')) {
+  button.classList.toggle('active', button.dataset.locale === currentLocale());
+  button.addEventListener('click', () => setLocale(button.dataset.locale));
+}
 window.mapEditor = new MapEditor();

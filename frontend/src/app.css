@@ -44,8 +44,11 @@ button.active { outline: 3px solid #a8d1ff; border-color: #0969da; }
 
 .switch { display: flex; align-items: center; gap: 8px; margin: 8px 0; color: #344256; cursor: pointer; font-size: 13px; }
 .switch input { width: 16px; height: 16px; flex: 0 0 auto; margin: 0; accent-color: #0969da; }
-footer { display: flex; gap: 14px; border-top: 1px solid #dce4ec; padding-top: 12px; color: #53657a; font-size: 12px; }
+footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; border-top: 1px solid #dce4ec; padding-top: 12px; color: #53657a; font-size: 12px; }
 footer strong { color: #172033; }
+.lang-switch { display: flex; gap: 4px; margin-left: auto; }
+.lang-switch button { min-height: 22px; padding: 1px 7px; font-size: 11px; font-weight: 600; border-radius: 6px; color: #53657a; }
+.lang-switch button.active { outline: none; border-color: #0969da; background: #0969da; color: #fff; }
 
 .feature-panel label { display: grid; gap: 5px; margin: 12px 0; color: #405168; font-size: 12px; font-weight: 650; }
 .feature-meta, .form-hint { margin: -4px 0 10px; color: #64748b; font-size: 12px; line-height: 1.4; }

@@ -1,5 +1,6 @@
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { mapLibreLocale } from './strings.js';
 
 // One map bootstrap for the editor and the client (rule F1), so view
 // defaults and request handling can never drift apart.
@@ -7,6 +8,7 @@ export function createMap(container = 'map') {
   return new maplibregl.Map({
     container,
     style: '/styles/editor.json',
+    locale: mapLibreLocale(),
     center: [64.5853, 41.3775],
     zoom: 5.4,
     maxZoom: 20,

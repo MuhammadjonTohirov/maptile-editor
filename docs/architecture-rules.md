@@ -14,7 +14,8 @@ commit with the reason.
   generated deployment artifact. Application code never mutates it.
 - **X3 — One source of truth per concern.** Schema lives in `db/migrations/`,
   map style in `frontend/styles/editor.json`, layer-id lists in
-  `frontend/src/layers.js`, user-visible strings in `frontend/src/strings.js`.
+  `frontend/src/layers.js`, user-visible strings in the per-language catalogs
+  under `frontend/src/locales/` behind `frontend/src/strings.js`.
   Nothing duplicates these; everything imports them.
 - **X4 — Deployment artifacts are reproducible.** Images build from pinned
   bases and lockfiles (`package-lock.json`, pinned `requirements.txt`).
@@ -115,8 +116,12 @@ commit with the reason.
   goes through `layers.js` helpers that check `map.getLayer` first, so a
   style edit cannot crash the app at runtime.
 - **F7 — User-visible strings are localized.** JS never embeds UI copy
-  inline; it calls `t(key, params)` from `strings.js`, the single catalog a
-  translation can replace.
+  inline; it calls `t(key, params)` from `strings.js`, which resolves the
+  active locale (`?lang=` override → saved choice → browser language →
+  English) against the per-language catalogs in `frontend/src/locales/`.
+  Static markup carries `data-i18n` attributes applied by
+  `localizeDocument()`; MapLibre control labels come from `mapLibreLocale()`.
+  Every catalog must mirror the English key set and `{placeholder}` tokens.
 - **F8 — The client is a finished map.** `client.html` renders detail
   exclusively from editor data (base detail layers hidden), repaints edits
   with the basemap palette, polls `/api/features` only while the tab is
@@ -126,8 +131,9 @@ commit with the reason.
   bounded stack; undo replays the inverse and refreshes tiles + data.
 - **F10 — Style consistency is machine-checked.** `npm run check:frontend`
   syntax-checks every source module, validates `editor.json` against the
-  MapLibre style spec, and verifies that every layer id referenced from
-  `layers.js` and `base-masks.js` exists in the style.
+  MapLibre style spec, verifies that every layer id referenced from
+  `layers.js` and `base-masks.js` exists in the style, and enforces locale
+  catalog parity with English (`scripts/check-locales.mjs`).
 - **F11 — Saving geometry preserves identity.** Terra Draw's store carries
   only `{serverId, mode}`; payloads for an existing feature are built from
   the authoritative selected properties so a reshape or drag can never reset

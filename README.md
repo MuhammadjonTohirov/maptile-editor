@@ -74,6 +74,14 @@ editor and the client view: point and polygon names at the feature's anchor,
 street and line names along the road line itself. Roads label only their real
 street title; unnamed roads carry no label.
 
+The interface ships in Uzbek (Latin), Russian, and English. The language comes
+from the `?lang=uz|ru|en` URL parameter, a previously saved choice, or the
+browser language, in that order; the switcher in the editor panel footer
+changes it and the choice persists. Localization covers the panel markup,
+every runtime message, and the map control labels — translations live in
+`frontend/src/locales/`, and the frontend check enforces that every catalog
+matches the English key set.
+
 The current view (zoom, center, bearing, pitch) is kept in the URL fragment in
 both the editor and the client, so a location can be bookmarked, shared, or
 reloaded in place. Road widths scale exponentially with zoom past the base
