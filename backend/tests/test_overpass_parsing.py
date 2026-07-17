@@ -36,3 +36,22 @@ def test_parse_direction():
     assert parse_direction({"oneway": "yes"}) == "oneway"
     assert parse_direction({"oneway": "-1"}) == "oneway_reverse"
     assert parse_direction({}) == "bidirectional"
+
+
+def test_failure_description_never_empty():
+    import httpx
+    from overpass import describe_failure
+
+    timeout = httpx.ReadTimeout("")
+    assert describe_failure("https://x", timeout) == "https://x: ReadTimeout"
+    assert describe_failure("https://x", ValueError("bad json")) == "https://x: bad json"
+
+
+def test_queries_embed_the_shared_timeout():
+    from osm_import import IMPORT_KINDS
+    from overpass import QUERY_TIMEOUT_S
+    from schemas import BoundsRequest
+
+    bounds = BoundsRequest(west=69.2, south=41.3, east=69.3, north=41.4)
+    for kind in IMPORT_KINDS.values():
+        assert f"[timeout:{QUERY_TIMEOUT_S}]" in kind.query(bounds)

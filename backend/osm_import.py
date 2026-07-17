@@ -13,6 +13,7 @@ from models import (
     SOURCE_KIND_OSM_IMPORT,
 )
 from overpass import (
+    QUERY_TIMEOUT_S,
     fetch_overpass,
     parse_direction,
     parse_height,
@@ -176,14 +177,14 @@ IMPORT_KINDS = {
         label="buildings",
         count_key="buildings_loaded",
         osm_type="way",
-        query=lambda bounds: f'[out:json][timeout:25];(way["building"]({bounds.bbox}););out geom;',
+        query=lambda bounds: f'[out:json][timeout:{QUERY_TIMEOUT_S}];(way["building"]({bounds.bbox}););out geom;',
         build=_build_building,
     ),
     "roads": ImportKind(
         label="roads",
         count_key="roads_loaded",
         osm_type="way",
-        query=lambda bounds: f'[out:json][timeout:25];(way["highway"]({bounds.bbox}););out geom;',
+        query=lambda bounds: f'[out:json][timeout:{QUERY_TIMEOUT_S}];(way["highway"]({bounds.bbox}););out geom;',
         build=_build_road,
     ),
     "streetlights": ImportKind(
@@ -191,7 +192,7 @@ IMPORT_KINDS = {
         count_key="streetlights_loaded",
         osm_type="node",
         query=lambda bounds: (
-            f'[out:json][timeout:25];('
+            f'[out:json][timeout:{QUERY_TIMEOUT_S}];('
             f'node["highway"="street_lamp"]({bounds.bbox});'
             f'node["amenity"="street_lamp"]({bounds.bbox});'
             f'node["man_made"="street_lamp"]({bounds.bbox});'
@@ -205,7 +206,7 @@ IMPORT_KINDS = {
         count_key="traffic_lights_loaded",
         osm_type="node",
         query=lambda bounds: (
-            f'[out:json][timeout:25];('
+            f'[out:json][timeout:{QUERY_TIMEOUT_S}];('
             f'node["highway"="traffic_signals"]({bounds.bbox});'
             f'node["traffic_signals"="signal"]({bounds.bbox});'
             f'node["amenity"="traffic_light"]({bounds.bbox});'
