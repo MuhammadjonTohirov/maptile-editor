@@ -561,7 +561,11 @@ class MapEditor {
     return {
       Point: [['point', t('typePoint')], ['poi', t('typePoi')], ['business', t('typeBusiness')]],
       LineString: [['line', t('typeLine')], ['road', t('typeRoad')], ['waterway', t('typeWaterway')]],
-      Polygon: [['area', t('typeArea')], ['building', t('typeBuilding')], ['landuse', t('typeLanduse')]],
+      Polygon: [
+        ['area', t('typeArea')], ['building', t('typeBuilding')], ['landuse', t('typeLanduse')],
+        ['park', t('typePark')], ['water', t('typeWater')], ['forest', t('typeForest')],
+        ['grass', t('typeGrass')],
+      ],
     }[geometryType] || [['manual', t('typeFeature')]];
   }
 

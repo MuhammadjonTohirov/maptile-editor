@@ -156,6 +156,13 @@ backend is volume-mounted and reloads on save.
   (Height (m) field). It drives the 3D extrusion height in full-base mode
   (`EDITOR_3D_LAYER` extrudes by `coalesce(height_m, 8)`); OSM imports fill it
   from the `height` tag. Buildings without a height extrude to the 8 m default.
+- `feature_type` is free-text (no DB enum), so new object types need no
+  migration. The editor's type dropdown offers options per geometry: points
+  (point / POI / business), lines (line / road / river-waterway), polygons
+  (area / building / land-use / park / water / forest / grass). The full-base
+  palette (`basemap-render.js`, `FILL_COLOR`) colors geographic polygons from
+  the OSM natural palette — water blue, park/forest/grass green — so a manually
+  added lake or park reads like the basemap.
 - Features can carry an emoji in the `icon` column. Styles reference it as an
   `emoji:<char>` image; `frontend/src/emoji-icons.js` rasterizes emoji on the
   `styleimagemissing` event, so no sprite sheet is needed. Points with an icon

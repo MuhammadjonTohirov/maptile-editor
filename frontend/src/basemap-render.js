@@ -60,7 +60,20 @@ const ROAD_SORT_KEY = ['match', ['coalesce', ['get', 'road_type'], ''],
   ['residential', 'unclassified', 'living_street', 'pedestrian'], 5,
   ['footway', 'path', 'steps', 'cycleway', 'track'], 2,
   4];
-const FILL_COLOR = ['match', ['coalesce', ['get', 'feature_type'], ''], 'landuse', '#f3f0ea', '#dcd6cf'];
+// Geographic fills mirror the basemap's own natural palette, so a manually added
+// lake or park reads like the base map: water blue, greens for park/forest/grass.
+// Land-use stays beige; buildings and generic areas stay neutral.
+const FILL_COLOR = ['match', ['coalesce', ['get', 'feature_type'], ''],
+  'water', '#acd9ec',
+  'park', '#d4e9c6',
+  'forest', '#c9dfb9',
+  'grass', '#d9edc9',
+  'landuse', '#f3f0ea',
+  '#dcd6cf'];
+const FILL_OUTLINE_COLOR = ['match', ['coalesce', ['get', 'feature_type'], ''],
+  'water', '#8fc8e5',
+  ['park', 'forest', 'grass'], '#b6cfa0',
+  '#c8c0b8'];
 
 function setPaint(map, layerId, properties) {
   if (!map.getLayer(layerId)) return;
@@ -110,7 +123,7 @@ export function paintEditorAsBasemap(map) {
     }, 'editor-import-line');
   }
   for (const layerId of ['editor-manual-fill', 'editor-import-fill']) {
-    setPaint(map, layerId, { 'fill-color': FILL_COLOR, 'fill-opacity': 0.9, 'fill-outline-color': '#c8c0b8' });
+    setPaint(map, layerId, { 'fill-color': FILL_COLOR, 'fill-opacity': 0.9, 'fill-outline-color': FILL_OUTLINE_COLOR });
   }
   setPaint(map, 'editor-manual-outline', { 'line-color': '#c8c0b8', 'line-width': 1 });
   for (const layerId of ['editor-manual-lines', 'editor-import-line']) {
