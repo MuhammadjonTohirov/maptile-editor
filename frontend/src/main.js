@@ -95,6 +95,7 @@ class MapEditor {
     // Full base: the whole country is loaded as editor data, rendered from
     // tiles with the basemap palette; there is no per-area import or base copy.
     this.fullBase = false;
+    this.totalFeatureCount = null;
     this.interactiveLayers = EDITOR_LAYERS;
     this.selected = null;
     this.editorRevision = 0;
@@ -134,7 +135,11 @@ class MapEditor {
     this.map.on('load', async () => {
       this.baseFilters = captureBaseFilters(this.map);
       try {
-        this.fullBase = (await featuresApi.meta()).full_base;
+        const meta = await featuresApi.meta();
+        this.fullBase = meta.full_base;
+        // Cached so panning does not re-run a count over millions of rows;
+        // it is a total-features readout, not a live figure.
+        this.totalFeatureCount = meta.feature_count;
       } catch (error) {
         console.error('Unable to read map metadata', error);
       }
@@ -938,10 +943,8 @@ class MapEditor {
   // Country scale: render from tiles, and fetch only the viewport's features
   // for snapping, and only when zoomed in enough to edit them (rule F4).
   async refreshViewportData() {
-    try {
-      this.elements['feature-count'].textContent = (await featuresApi.meta()).feature_count;
-    } catch (error) {
-      console.error('Unable to read feature count', error);
+    if (this.totalFeatureCount != null) {
+      this.elements['feature-count'].textContent = this.totalFeatureCount;
     }
     if (this.map.getZoom() < EDIT_ZOOM) {
       this.snapVertices = [];

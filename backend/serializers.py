@@ -20,14 +20,15 @@ PROPERTY_COLUMNS = (
 
 
 def geojson_query() -> Select:
-    # Deterministic order keeps repeated reads byte-identical, so clients can
-    # compare responses without seeing phantom changes.
+    # No ORDER BY: a bbox viewport read must use the geometry GIST index, and
+    # an ORDER BY id would force the planner to sort by primary key instead.
+    # Change detection uses the /features/version stamp, not list ordering.
     return select(
         Feature.id,
         Feature.properties,
         *(getattr(Feature, column) for column in PROPERTY_COLUMNS),
         ST_AsGeoJSON(Feature.geometry).label("geometry_json"),
-    ).order_by(Feature.id)
+    )
 
 
 def row_to_geojson(row) -> GeoJSONFeature:

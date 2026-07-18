@@ -88,7 +88,11 @@ log "Staging street furniture (points)"
 run_ogr points -nln points -where "highway IN ('traffic_signals','street_lamp')" "${COMMON_LCO[@]}" ${SPAT_ARGS[@]+"${SPAT_ARGS[@]}"}
 
 log "Transforming staging into features"
-run_psql -f - < "$ROOT/scripts/load-uzbekistan-osm.sql"
+# The SQL is mounted rather than piped: `docker run` without -i does not
+# forward stdin, so `psql -f -` would silently run an empty script.
+docker run --rm --network "$NETWORK" -e PGPASSWORD=postgres \
+  -v "$ROOT/scripts/load-uzbekistan-osm.sql:/sql/transform.sql:ro" \
+  "$PSQL_IMAGE" psql "$PG_PSQL" -v ON_ERROR_STOP=1 -f /sql/transform.sql
 
 log "Cleaning up staging schema"
 run_psql -c "DROP SCHEMA IF EXISTS osm_load CASCADE;"

@@ -68,8 +68,10 @@ async def get_features(
     query = geojson_query()
     if bbox is not None:
         query = query.where(_bbox_filter(bbox))
-    if limit is not None:
-        query = query.limit(limit)
+    # An unbounded read is still capped so a full-country table can never dump
+    # millions of rows: overlay-mode datasets stay under FULL_BASE_THRESHOLD,
+    # and full-base mode always passes an explicit (smaller) viewport limit.
+    query = query.limit(limit or FULL_BASE_THRESHOLD)
     result = await db.execute(query)
     return GeoJSONFeatureCollection(features=[row_to_geojson(row) for row in result])
 

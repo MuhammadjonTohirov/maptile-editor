@@ -41,3 +41,11 @@ def test_columns_override_stale_jsonb_duplicates():
 def test_missing_geometry_is_null_not_error():
     feature = row_to_geojson(make_row(geometry_json=None))
     assert feature.geometry is None
+
+
+def test_geojson_query_is_unordered_for_bbox_index_use():
+    # An ORDER BY id makes the planner sort by primary key instead of using the
+    # geometry GIST index on a bbox viewport read, which is ~10x slower at
+    # country scale. Keep the base query unordered.
+    from serializers import geojson_query
+    assert "ORDER BY" not in str(geojson_query()).upper()

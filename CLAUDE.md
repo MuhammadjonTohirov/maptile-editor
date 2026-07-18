@@ -126,10 +126,13 @@ backend is volume-mounted and reloads on save.
   from editor tiles with the basemap palette (`frontend/src/basemap-render.js`,
   shared by both). In this mode the editor scopes its per-feature reads to the
   viewport (`/api/features?bbox=`, for snapping, only at zoom ≥ 15), searches
-  server-side (`/api/features/search`), and does no per-area import or base
-  copy — every feature is edited directly. Below the threshold the small-data
-  overlay (base detail visible, full-list masks/snap, base-copy workflow) is
-  used unchanged.
+  server-side (`/api/features/search`, backed by a `pg_trgm` GIN index on
+  `name`), and does no per-area import or base copy — every feature is edited
+  directly. Below the threshold the small-data overlay (base detail visible,
+  full-list masks/snap, base-copy workflow) is used unchanged. Bbox reads use
+  the geometry GIST index, so `serializers.geojson_query()` must stay
+  unordered; every read is capped (`/api/features` at `FULL_BASE_THRESHOLD`,
+  viewport reads at `FEATURE_QUERY_LIMIT`) so no route dumps millions of rows.
 - While editing at zoom ≥ 15, viewport roads are imported automatically
   (`prepareViewportRoads`) so every road is a tappable editor feature with its
   full OSM geometry — base road tiles are fragmented per tile and too thin to

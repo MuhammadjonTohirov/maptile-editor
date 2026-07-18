@@ -5,7 +5,9 @@ base_url="${MAP_EDITOR_URL:-http://localhost:3000}"
 
 curl --fail --silent --show-error "$base_url/" >/dev/null
 curl --fail --silent --show-error "$base_url/api/health" >/dev/null
-curl --fail --silent --show-error "$base_url/api/features" | jq -e '.type == "FeatureCollection"' >/dev/null
+# A bounded read: the full-country dataset must never be serialized whole.
+curl --fail --silent --show-error "$base_url/api/features?limit=1" | jq -e '.type == "FeatureCollection"' >/dev/null
+curl --fail --silent --show-error "$base_url/api/meta" | jq -e 'has("full_base")' >/dev/null
 
 # OpenMapTiles generation includes low-zoom global coverage even for a regional
 # extract. A successful response proves Nginx and Martin rewrite the base path.
