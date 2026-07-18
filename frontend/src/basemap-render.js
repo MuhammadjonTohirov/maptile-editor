@@ -122,6 +122,13 @@ export function paintEditorAsBasemap(map) {
       'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1,
     });
   }
+  // Place names and admin boundaries come from the base tiles and sit below the
+  // editor detail in the style, so the opaque building fills would draw over
+  // them. Lift them above the editor detail (place labels topmost) so city
+  // names stay legible.
+  for (const layerId of ['boundaries', 'place-labels']) {
+    if (map.getLayer(layerId)) map.moveLayer(layerId);
+  }
 }
 
 // Icon and point-name layers driven straight from the editor tiles, so they
@@ -136,6 +143,9 @@ const ANCHOR_SYMBOL_LAYERS = [
 
 export function addTileSymbolLayers(map) {
   setLayerVisibility(map, ANCHOR_SYMBOL_LAYERS, false);
+  // Insert below the base place labels so city names keep priority over the
+  // editor's own icons and point labels.
+  const beforeId = map.getLayer('place-labels') ? 'place-labels' : undefined;
   if (!map.getLayer('editor-basemap-icons')) {
     map.addLayer({
       id: 'editor-basemap-icons',
@@ -152,7 +162,7 @@ export function addTileSymbolLayers(map) {
         'icon-size': ['interpolate', ['linear'], ['zoom'], 15, 0.5, 17, 0.75],
         'icon-allow-overlap': false,
       },
-    });
+    }, beforeId);
   }
   if (!map.getLayer('editor-basemap-point-labels')) {
     map.addLayer({
@@ -175,6 +185,6 @@ export function addTileSymbolLayers(map) {
         'text-optional': true,
       },
       paint: { 'text-color': '#4a5568', 'text-halo-color': '#ffffff', 'text-halo-width': 1 },
-    });
+    }, beforeId);
   }
 }
