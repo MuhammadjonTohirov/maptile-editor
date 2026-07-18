@@ -75,8 +75,20 @@ async function refreshEdits() {
   }
 }
 
-map.on('load', async () => {
+// Repaint to the basemap palette as soon as the style parses — before the
+// first tile is fetched or painted. The `load` event fires only after the first
+// full render, so painting there flashes the editor's editing colors (violet/
+// blue fills) for a frame before they turn to the basemap palette. The layers
+// exist on the first `styledata` (well before tiles load, so before any paint);
+// `isStyleLoaded()` is the wrong gate here — it also waits on tile sources.
+let basemapPainted = false;
+map.on('styledata', () => {
+  if (basemapPainted || !map.getLayer('editor-manual-fill')) return;
+  basemapPainted = true;
   paintEditorAsBasemap(map);
+});
+
+map.on('load', async () => {
   try {
     fullBase = (await featuresApi.meta()).full_base;
   } catch (error) {
