@@ -67,6 +67,7 @@ services:
       RUST_LOG: "warn"
     volumes:
       - ./tiles:/tiles:ro
+      - ./fonts:/fonts:ro
       - ./martin/config.yaml:/config/config.yaml:ro
     command: ["--config", "/config/config.yaml"]
     depends_on:

@@ -5,6 +5,7 @@
     "maplibre:type": "map",
     "maptile-editor:base": "OpenMapTiles-compatible Uzbekistan archive"
   },
+  "glyphs": "/fonts/{fontstack}/{range}",
   "sources": {
     "osm_base": {
       "type": "vector",
@@ -466,7 +467,7 @@
           ]
         ],
         "text-font": [
-          "sans-serif"
+          "Noto Sans Regular"
         ],
         "text-size": [
           "interpolate",
@@ -509,7 +510,7 @@
           ]
         ],
         "text-font": [
-          "sans-serif"
+          "Noto Sans Regular"
         ],
         "text-size": 11
       },
@@ -1005,7 +1006,7 @@
           "name"
         ],
         "text-font": [
-          "sans-serif"
+          "Noto Sans Regular"
         ],
         "text-size": 12,
         "text-anchor": "top",
@@ -1065,7 +1066,7 @@
           "name"
         ],
         "text-font": [
-          "sans-serif"
+          "Noto Sans Regular"
         ],
         "text-size": 11,
         "visibility": "none"
@@ -1155,7 +1156,7 @@
           "name"
         ],
         "text-font": [
-          "sans-serif"
+          "Noto Sans Regular"
         ],
         "text-size": 12,
         "text-anchor": "top",
@@ -1214,7 +1215,7 @@
           "name"
         ],
         "text-font": [
-          "sans-serif"
+          "Noto Sans Regular"
         ],
         "text-size": 11
       },

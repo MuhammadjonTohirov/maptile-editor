@@ -178,7 +178,7 @@ export function addTileSymbolLayers(map) {
       ],
       layout: {
         'text-field': ['get', 'name'],
-        'text-font': ['sans-serif'],
+        'text-font': ['Noto Sans Regular'],
         'text-size': 11,
         'text-offset': [0, 1.1],
         'text-anchor': 'top',

@@ -15,3 +15,7 @@ postgres:
 mbtiles:
   sources:
     osm_base: /tiles/osm_uzbekistan.mbtiles
+# Self-hosted glyphs: Martin turns the bundled fonts into glyph ranges and
+# serves them at /font/{fontstack}/{start}-{end} (nginx exposes it same-origin
+# as /fonts/). Without a glyphs source MapLibre renders no text labels.
+fonts: /fonts

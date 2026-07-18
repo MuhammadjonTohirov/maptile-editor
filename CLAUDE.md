@@ -13,11 +13,12 @@ Browser (MapLibre GL JS + Terra Draw)
             |
             v
 Nginx / frontend (:3000)
-   | /api/*                   | /tiles/base/*, /tiles/editor/*
+   | /api/*                   | /tiles/base/*, /tiles/editor/*, /fonts/*
    v                          v
 FastAPI (:8000)            Martin
    |                          |-- tiles/osm_uzbekistan.mbtiles
-   v                          `-- PostGIS features table
+   |                          |-- PostGIS features table
+   v                          `-- fonts/ (glyph ranges for map labels)
 PostGIS (host :5434; internal :5432)
 ```
 
@@ -31,6 +32,11 @@ PostGIS (host :5434; internal :5432)
   provides context (terrain, water, boundaries, place names) and every detail
   object comes from editor data, restyled with the basemap palette.
 - `tiles/osm_uzbekistan.mbtiles` is a generated, ignored deployment artifact.
+- `fonts/` holds the self-hosted map fonts (Noto Sans, Latin + Cyrillic in one
+  file). Martin turns them into glyph ranges; the style's `glyphs` points at the
+  same-origin `/fonts/{fontstack}/{range}`. MapLibre renders no text label
+  without a glyphs source, so every `text-font` must name a fontstack Martin
+  serves (`Noto Sans Regular`); confirm new fonts in Martin's `/catalog`.
 - `db/migrations/` is the only schema authority. `000_baseline.sql` bootstraps
   a fresh database; there are no separate init scripts.
 - `docs/architecture-rules.md` holds the per-layer architecture rules (X/B/D/F
@@ -168,8 +174,9 @@ backend is volume-mounted and reloads on save.
 
 - Keep base tiles self-hosted; do not add external raster tile URLs or CDN map
   dependencies.
-- Keep public requests same-origin through Nginx (`/api`, `/tiles/base`, and
-  `/tiles/editor`).
+- Keep public requests same-origin through Nginx (`/api`, `/tiles/base`,
+  `/tiles/editor`, and `/fonts`). Self-host glyphs too — never point the style's
+  `glyphs` at an external font CDN.
 - Store editing geometries in EPSG:4326. MapLibre and vector tiles handle map
   display projection.
 - Use migration files for schema changes; do not alter a deployed schema from
