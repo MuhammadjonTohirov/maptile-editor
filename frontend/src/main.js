@@ -76,9 +76,9 @@ const DRAW_MODE_BUTTONS = {
 
 const FORM_FIELDS = [
   'feature-name', 'feature-description', 'feature-icon', 'building-type',
-  'building-number', 'road-type', 'road-direction', 'lane-count',
-  'max-speed', 'road-surface', 'business-type', 'business-floor',
-  'business-phone', 'business-hours',
+  'building-number', 'building-height', 'road-type', 'road-direction',
+  'lane-count', 'max-speed', 'road-surface', 'business-type',
+  'business-floor', 'business-phone', 'business-hours',
 ];
 
 function extraProperties(properties) {
@@ -113,7 +113,7 @@ class MapEditor {
         'undo-edit', 'duplicate-feature', 'delete-feature', 'toggle-imports',
         'toggle-3d', 'feature-panel', 'feature-name', 'feature-description',
         'feature-icon', 'feature-geometry', 'feature-type', 'building-fields',
-        'building-type', 'building-number', 'road-fields', 'road-type',
+        'building-type', 'building-number', 'building-height', 'road-fields', 'road-type',
         'road-direction', 'lane-count', 'max-speed', 'road-surface',
         'business-fields', 'business-type', 'business-floor', 'business-phone',
         'business-hours', 'building-businesses', 'add-business',
@@ -590,6 +590,7 @@ class MapEditor {
     this.setFeatureTypeOptions(geometryType, properties.feature_type);
     this.elements['building-type'].value = properties.building_type || '';
     this.elements['building-number'].value = properties.building_number || '';
+    this.elements['building-height'].value = properties.height_m ?? '';
     this.elements['road-type'].value = properties.road_type || '';
     this.elements['road-direction'].value = properties.direction || '';
     this.elements['lane-count'].value = properties.lane_count ?? '';
@@ -639,6 +640,9 @@ class MapEditor {
       || this.featureTypeOptions(geometry.type)[0][0];
     const buildingType = featureType === 'building' ? (this.elements['building-type'].value || null) : null;
     const buildingNumber = featureType === 'building' ? (this.elements['building-number'].value.trim() || null) : null;
+    const heightM = featureType === 'building'
+      ? this.floatFieldValue('building-height')
+      : (previousProperties.height_m ?? null);
     const roadType = featureType === 'road' ? (this.elements['road-type'].value.trim() || null) : null;
     const direction = featureType === 'road' ? (this.elements['road-direction'].value || null) : null;
     const laneCount = featureType === 'road' ? this.integerFieldValue('lane-count') : null;
@@ -660,7 +664,7 @@ class MapEditor {
       feature_type: featureType,
       osm_id: previousProperties.osm_id || null,
       osm_type: previousProperties.osm_type || null,
-      height_m: previousProperties.height_m ?? null,
+      height_m: heightM,
       road_type: roadType,
       direction,
       lane_count: laneCount,
@@ -684,6 +688,13 @@ class MapEditor {
   integerFieldValue(elementId) {
     const value = this.elements[elementId].value;
     return value === '' ? null : Number.parseInt(value, 10);
+  }
+
+  floatFieldValue(elementId) {
+    const value = this.elements[elementId].value;
+    if (value === '') return null;
+    const parsed = Number.parseFloat(value);
+    return Number.isNaN(parsed) ? null : parsed;
   }
 
   // Rebuilds a full API payload from stored data without reading the form,

@@ -152,6 +152,10 @@ backend is volume-mounted and reloads on save.
   them (`GET /api/features/{id}/businesses`) and adds one at the building
   center; the `business_type` category suggests an emoji icon, and extras
   (`floor`, `phone`, `opening_hours`) live in the JSONB properties blob.
+- A building's `height_m` column is editable from its properties panel
+  (Height (m) field). It drives the 3D extrusion height in full-base mode
+  (`EDITOR_3D_LAYER` extrudes by `coalesce(height_m, 8)`); OSM imports fill it
+  from the `height` tag. Buildings without a height extrude to the 8 m default.
 - Features can carry an emoji in the `icon` column. Styles reference it as an
   `emoji:<char>` image; `frontend/src/emoji-icons.js` rasterizes emoji on the
   `styleimagemissing` event, so no sprite sheet is needed. Points with an icon

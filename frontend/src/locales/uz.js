@@ -123,6 +123,7 @@ export default {
   buildingRetail: 'Chakana savdo',
   buildingWarehouse: 'Ombor',
   labelBuildingNumber: 'Bino raqami',
+  labelHeight: 'Balandligi (m)',
   labelRoadClass: 'Yoʻl turkumi',
   roadClassPlaceholder: 'residential, primary…',
   labelDirection: 'Yoʻnalish',

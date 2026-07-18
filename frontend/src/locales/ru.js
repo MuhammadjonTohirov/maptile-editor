@@ -123,6 +123,7 @@ export default {
   buildingRetail: 'Торговое',
   buildingWarehouse: 'Склад',
   labelBuildingNumber: 'Номер здания',
+  labelHeight: 'Высота (м)',
   labelRoadClass: 'Класс дороги',
   roadClassPlaceholder: 'residential, primary…',
   labelDirection: 'Направление',

@@ -123,6 +123,7 @@ export default {
   buildingRetail: 'Retail',
   buildingWarehouse: 'Warehouse',
   labelBuildingNumber: 'Building number',
+  labelHeight: 'Height (m)',
   labelRoadClass: 'Road class',
   roadClassPlaceholder: 'residential, primary…',
   labelDirection: 'Direction',
