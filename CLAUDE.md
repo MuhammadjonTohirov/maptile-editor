@@ -172,6 +172,22 @@ backend is volume-mounted and reloads on save.
   them (`GET /api/features/{id}/businesses`) and adds one at the building
   center; the `business_type` category suggests an emoji icon, and extras
   (`floor`, `phone`, `opening_hours`) live in the JSONB properties blob.
+- Businesses can be bulk-imported from a JSONL file with
+  `backend/import_businesses.py` (run in the backend container, path or stdin).
+  It is source-agnostic: each line is a generic business record (name/title, a
+  category, lat/lon, optional phone/opening_hours/address), mapped to a
+  `business` point, category → `business_type`, and linked to the building it
+  falls inside. `--source <label>` tags the batch in `properties.import_source`
+  and a re-run with the same label replaces it (idempotent). It asserts no
+  provenance — only load data you have the right to use; OSM (ODbL) is the
+  license-compatible source for the OSM-based map.
+- OSM business POIs (which the bulk loader skips — it only does buildings, roads,
+  and street furniture) come in through the `businesses` import kind in
+  `osm_import.py` (`amenity` in the eatery/pharmacy/bank/fuel set, plus any
+  `shop`/`office` node → a `business` point, deduped by OSM id). Run it for a
+  region with `backend/import_osm_businesses.py --region <name>`, which also
+  links each business to its building. Small enough to stay under the
+  `BoundsRequest` area cap; not yet wired to a UI button.
 - A building's `height_m` column is editable from its properties panel
   (Height (m) field). It drives the 3D extrusion height in full-base mode
   (`EDITOR_3D_LAYER` extrudes by `coalesce(height_m, 8)`); OSM imports fill it

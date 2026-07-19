@@ -30,8 +30,26 @@ _REPLACEABLE_ATTRIBUTES = (
     "description", "geometry", "properties", "building_number",
     "building_type", "icon", "osm_id", "osm_type", "source_kind",
     "feature_type", "height_m", "road_type", "direction", "lane_count",
-    "max_speed", "surface",
+    "max_speed", "surface", "business_type",
 )
+
+# OSM amenity value → (editor business_type, emoji). Only these amenities are
+# treated as businesses; the broad amenity space (benches, bins…) is ignored.
+_BUSINESS_AMENITIES = {
+    "restaurant": ("restaurant", "🍽️"),
+    "fast_food": ("restaurant", "🍔"),
+    "food_court": ("restaurant", "🍽️"),
+    "bar": ("restaurant", "🍺"),
+    "pub": ("restaurant", "🍺"),
+    "cafe": ("cafe", "☕"),
+    "pharmacy": ("pharmacy", "💊"),
+    "bank": ("bank", "🏦"),
+    "fuel": ("other", "⛽"),
+}
+_SHOP_EMOJI = {
+    "supermarket": "🛒", "convenience": "🏪", "bakery": "🥖",
+    "clothes": "👕", "mall": "🏬", "greengrocer": "🥬",
+}
 
 
 @dataclass(frozen=True)
@@ -172,7 +190,70 @@ def _build_traffic_light(element: dict) -> Optional[Feature]:
     )
 
 
+def _osm_address(tags: dict) -> Optional[str]:
+    if tags.get("addr:full"):
+        return tags["addr:full"]
+    parts = [tags.get("addr:street"), tags.get("addr:housenumber")]
+    return " ".join(part for part in parts if part) or None
+
+
+def _build_business(element: dict) -> Optional[Feature]:
+    """A shop/office/business-amenity node → a business point feature."""
+    tags = element.get("tags", {})
+    if element.get("type") != "node" or "lat" not in element or "lon" not in element:
+        return None
+    amenity, shop, office = tags.get("amenity"), tags.get("shop"), tags.get("office")
+    if amenity in _BUSINESS_AMENITIES:
+        business_type, icon = _BUSINESS_AMENITIES[amenity]
+        category = amenity
+    elif shop:
+        business_type, icon, category = "shop", _SHOP_EMOJI.get(shop, "🏪"), f"shop:{shop}"
+    elif office:
+        business_type, icon, category = "office", "🏢", f"office:{office}"
+    else:
+        return None
+
+    properties = {
+        "osm_tags": tags,
+        "source": "openstreetmap",
+        "feature_type": "business",
+        "business_category": category,
+    }
+    if (phone := tags.get("phone") or tags.get("contact:phone")):
+        properties["phone"] = phone
+    if (hours := tags.get("opening_hours")):
+        properties["opening_hours"] = hours
+    if (address := _osm_address(tags)):
+        properties["address"] = address
+    return Feature(
+        # Unnamed businesses stay unnamed (render as an icon), never a placeholder.
+        name=tags.get("name") or tags.get("name:en") or "",
+        description=f"Business from OSM (ID: {element['id']})",
+        geometry=_geometry_value({"type": "Point", "coordinates": [element["lon"], element["lat"]]}),
+        icon=icon,
+        business_type=business_type,
+        osm_id=str(element["id"]),
+        osm_type="node",
+        source_kind=SOURCE_KIND_OSM_IMPORT,
+        feature_type="business",
+        properties=properties,
+    )
+
+
 IMPORT_KINDS = {
+    "businesses": ImportKind(
+        label="businesses",
+        count_key="businesses_loaded",
+        osm_type="node",
+        query=lambda bounds: (
+            f'[out:json][timeout:{QUERY_TIMEOUT_S}];('
+            f'node["amenity"~"^(restaurant|fast_food|food_court|bar|pub|cafe|pharmacy|bank|fuel)$"]({bounds.bbox});'
+            f'node["shop"]({bounds.bbox});'
+            f'node["office"]({bounds.bbox});'
+            f');out geom;'
+        ),
+        build=_build_business,
+    ),
     "buildings": ImportKind(
         label="buildings",
         count_key="buildings_loaded",
