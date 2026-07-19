@@ -31,7 +31,14 @@ async function request(path, { method = 'GET', body } = {}) {
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (!response.ok) throw new ApiError(response.status, await errorDetail(response));
+  if (!response.ok) {
+    // A 401 means the session is missing or expired. Broadcast it so the auth
+    // controller can show the login overlay, wherever the call came from.
+    if (response.status === 401) {
+      window.dispatchEvent(new CustomEvent('auth:required'));
+    }
+    throw new ApiError(response.status, await errorDetail(response));
+  }
   return response.json();
 }
 
@@ -48,4 +55,15 @@ export const featuresApi = {
   remove: (id) => request(`/api/features/${id}`, { method: 'DELETE' }),
   clearAll: () => request('/api/features/clear-all', { method: 'DELETE' }),
   importOsm: (kind, bounds) => request(`/api/load-osm-${kind}`, { method: 'POST', body: bounds }),
+};
+
+// Auth + user management. The session lives in an httpOnly cookie the browser
+// sends automatically, so there is no token to attach here.
+export const authApi = {
+  me: () => request('/api/auth/me'),
+  login: (username, password) => request('/api/auth/login', { method: 'POST', body: { username, password } }),
+  logout: () => request('/api/auth/logout', { method: 'POST' }),
+  listUsers: () => request('/api/auth/users'),
+  createUser: (payload) => request('/api/auth/users', { method: 'POST', body: payload }),
+  updateUser: (id, payload) => request(`/api/auth/users/${id}`, { method: 'PATCH', body: payload }),
 };

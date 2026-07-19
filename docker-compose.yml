@@ -47,6 +47,12 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/mapdata
       - CORS_ORIGINS=http://localhost:3000
+      # Editor auth. CHANGE ALL THREE before exposing this beyond localhost:
+      # JWT_SECRET signs sessions; ADMIN_* seeds the first admin only while the
+      # users table is empty. Set AUTH_COOKIE_SECURE=true when served over HTTPS.
+      - JWT_SECRET=dev-insecure-secret-change-in-production
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=changeme
     depends_on:
       migrations:
         condition: service_completed_successfully

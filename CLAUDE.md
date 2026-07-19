@@ -42,6 +42,26 @@ PostGIS (host :5434; internal :5432)
 - `docs/architecture-rules.md` holds the per-layer architecture rules (X/B/D/F
   ids); every change must comply with them.
 
+## Authentication
+
+- The editor requires a login; the public client viewer (`client.html`) stays
+  open and read-only. Reads (`GET`) are public; every write (`POST`/`PUT`/
+  `DELETE` on features + imports) depends on `require_user`, and user management
+  + `clear-all` depend on `require_admin` (`backend/auth.py`).
+- Sessions are a JWT in an **httpOnly, SameSite=Lax cookie** — JavaScript never
+  touches the token and cross-site writes cannot carry it, so `api.js` needs no
+  token handling (same-origin fetch sends the cookie). Backend auth lives in
+  `auth.py` (hashing/JWT/deps) + `auth_api.py` (`/auth/login|logout|me|users`);
+  frontend gate + admin panel in `frontend/src/auth-ui.js`.
+- Accounts live in the `users` table (migration `007`); admins manage them from
+  the in-editor panel. The first admin is seeded from `ADMIN_USERNAME`/
+  `ADMIN_PASSWORD` **only while the table is empty**. Before exposing the editor
+  beyond localhost, change those, set a real `JWT_SECRET`, and set
+  `AUTH_COOKIE_SECURE=true` under HTTPS (all env, see `config.py`).
+- `features.created_by`/`updated_by` (FK users, `ON DELETE SET NULL`) record who
+  created/last-edited each row; writes set them from the signed-in user and the
+  properties panel shows the names. Pre-auth rows and OSM imports carry null.
+
 ## Code layout
 
 - Backend (flat modules, one responsibility each): `main.py` assembles the

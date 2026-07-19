@@ -72,3 +72,28 @@ textarea { resize: vertical; }
 .hidden-objects li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
 .hidden-objects li.empty { color: #7a8494; }
 .hidden-objects button { min-height: 24px; padding: 2px 8px; font-size: 12px; }
+
+/* Editor auth: login gate + user management */
+.auth-overlay { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgb(18 32 55 / 45%); backdrop-filter: blur(2px); }
+/* display:flex above would otherwise override the hidden attribute, leaving
+   both the login and admin overlays permanently on screen. */
+.auth-overlay[hidden] { display: none; }
+.auth-card { width: min(360px, calc(100vw - 32px)); padding: 22px; background: #fff; border-radius: 14px; box-shadow: 0 16px 40px rgb(18 32 55 / 28%); }
+.auth-card h2 { margin: 4px 0 2px; font-size: 18px; color: #172033; }
+.auth-sub { margin: 0 0 12px; color: #53657a; font-size: 13px; }
+.auth-card label { display: grid; gap: 5px; margin: 12px 0; color: #405168; font-size: 12px; font-weight: 650; }
+.auth-card .primary { width: 100%; margin-top: 6px; }
+.auth-error { min-height: 16px; margin: 6px 0 0; color: #b42318; font-size: 12px; font-weight: 600; }
+.auth-viewer-link { margin: 14px 0 0; text-align: center; font-size: 12px; }
+.auth-viewer-link a { color: #0969da; }
+.user-chip { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 0 4px; font-size: 12px; color: #405168; }
+.user-chip[hidden] { display: none; }
+.user-chip-actions { display: flex; gap: 6px; }
+.user-chip button { min-height: 26px; padding: 3px 8px; font-size: 11px; }
+.admin-card { width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; }
+.admin-card h3 { margin: 16px 0 4px; font-size: 13px; color: #344256; }
+.admin-users { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
+.admin-users li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 12px; }
+.admin-users li .inactive { color: #94a3b8; }
+.admin-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.admin-actions button { min-height: 24px; padding: 2px 7px; font-size: 11px; }

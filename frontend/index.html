@@ -15,6 +15,13 @@
       <p class="eyebrow" data-i18n="panelEyebrow">Self-hosted vector map</p>
       <h1 data-i18n="panelHeading">Map Editor</h1>
       <p id="status" class="status" data-i18n="statusLoading">Loading map…</p>
+      <div id="user-chip" class="user-chip" hidden>
+        <span class="user-chip-name"><span data-i18n="authSignedInAs">Signed in as</span> <strong id="user-name"></strong></span>
+        <span class="user-chip-actions">
+          <button id="admin-open" type="button" data-i18n="authAdminPanel" hidden>Users</button>
+          <button id="logout-btn" type="button" data-i18n="logout">Log out</button>
+        </span>
+      </div>
     </div>
 
     <section>
@@ -83,6 +90,7 @@
       <button id="close-feature" class="icon-button" type="button" aria-label="Close properties" data-i18n-aria-label="closeProperties">×</button>
     </div>
     <p id="feature-geometry" class="feature-meta"></p>
+    <p id="feature-audit" class="feature-meta"></p>
     <label><span data-i18n="labelName">Name</span><input id="feature-name" type="text" autocomplete="off"></label>
     <label><span data-i18n="labelDescription">Description</span><textarea id="feature-description" rows="3"></textarea></label>
     <label><span data-i18n="labelIcon">Icon / emoji</span><input id="feature-icon" type="text" maxlength="8" placeholder="🏠, 🏥, ⛽ …" autocomplete="off"></label>
@@ -149,6 +157,35 @@
     <p class="form-hint" data-i18n="formHint">New shapes are saved immediately. Change details or geometry, then save again.</p>
     <button id="save-feature" class="primary" type="button" data-i18n="saveProperties">Save properties</button>
   </aside>
+
+  <div id="login-overlay" class="auth-overlay" hidden>
+    <form id="login-form" class="auth-card">
+      <p class="eyebrow" data-i18n="panelEyebrow">Self-hosted vector map</p>
+      <h2 data-i18n="authLoginHeading">Editor sign-in</h2>
+      <p class="auth-sub" data-i18n="authLoginSubtitle">Sign in to edit the map.</p>
+      <label><span data-i18n="authUsername">Username</span><input id="login-username" type="text" autocomplete="username"></label>
+      <label><span data-i18n="authPassword">Password</span><input id="login-password" type="password" autocomplete="current-password"></label>
+      <p id="login-error" class="auth-error" role="alert"></p>
+      <button id="login-submit" class="primary" type="submit" data-i18n="authSignIn">Sign in</button>
+      <p class="auth-viewer-link"><a href="/client.html" data-i18n="authViewerLink">Open the public map viewer</a></p>
+    </form>
+  </div>
+
+  <div id="admin-panel" class="auth-overlay" hidden>
+    <div class="auth-card admin-card">
+      <div class="panel-heading inline-heading">
+        <h2 data-i18n="authAdminPanel">User management</h2>
+        <button id="admin-close" class="icon-button" type="button" aria-label="Close" data-i18n-aria-label="closeProperties">×</button>
+      </div>
+      <ul id="admin-users" class="admin-users"></ul>
+      <h3 data-i18n="authCreateUser">Create user</h3>
+      <label><span data-i18n="authUsername">Username</span><input id="admin-new-username" type="text" autocomplete="off"></label>
+      <label><span data-i18n="authPassword">Password</span><input id="admin-new-password" type="password" autocomplete="new-password"></label>
+      <label class="switch"><input id="admin-new-admin" type="checkbox"><span data-i18n="authAdminCheckbox">Administrator</span></label>
+      <p id="admin-error" class="auth-error" role="alert"></p>
+      <button id="admin-create" class="primary" type="button" data-i18n="authCreateUser">Create user</button>
+    </div>
+  </div>
 
   <script type="module" src="/assets/app.js"></script>
 </body>

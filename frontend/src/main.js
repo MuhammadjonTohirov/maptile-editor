@@ -9,6 +9,7 @@ import {
 } from 'terra-draw';
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
 import { featuresApi, isMissing } from './api.js';
+import { AuthController } from './auth-ui.js';
 import { captureBaseFilters, applyBaseFeatureMasks } from './base-masks.js';
 import {
   addTileSymbolLayers,
@@ -49,7 +50,7 @@ const COLUMN_KEYS = [
   'name', 'description', 'icon', 'building_type', 'building_number',
   'road_type', 'direction', 'lane_count', 'max_speed', 'surface',
   'source_kind', 'feature_type', 'osm_id', 'osm_type', 'height_m',
-  'business_type', 'building_id',
+  'business_type', 'building_id', 'created_by', 'updated_by',
 ];
 
 // Category → suggested emoji; only fills an empty icon field, never overwrites.
@@ -112,7 +113,7 @@ class MapEditor {
         'draw-line', 'draw-polygon', 'draw-rect', 'draw-circle', 'select',
         'undo-edit', 'duplicate-feature', 'delete-feature', 'toggle-imports',
         'toggle-3d', 'feature-panel', 'feature-name', 'feature-description',
-        'feature-icon', 'feature-geometry', 'feature-type', 'building-fields',
+        'feature-icon', 'feature-geometry', 'feature-audit', 'feature-type', 'building-fields',
         'building-type', 'building-number', 'building-height', 'road-fields', 'road-type',
         'road-direction', 'lane-count', 'max-speed', 'road-surface',
         'business-fields', 'business-type', 'business-floor', 'business-phone',
@@ -123,8 +124,31 @@ class MapEditor {
       ].map((id) => [id, document.getElementById(id)]),
     );
 
+    this.currentUser = null;
+    // The editor page is unusable until a user signs in; reads stay public on
+    // the separate client viewer. Auth wiring lives in auth-ui.js.
+    this.auth = new AuthController({
+      onAuthenticated: (user) => this.onAuthenticated(user),
+      onLoggedOut: () => this.onLoggedOut(),
+    });
+
     this.createMap();
     this.bindControls();
+    this.auth.init();
+  }
+
+  onAuthenticated(user) {
+    this.currentUser = user;
+    // Clearing all data is admin-only on the server; hide the button otherwise.
+    this.elements['clear-all'].hidden = !user.is_admin;
+    // A feature may already be open (session refreshed) — repaint its audit line.
+    if (this.selected) this.showFeaturePanel();
+  }
+
+  onLoggedOut() {
+    this.currentUser = null;
+    // Drop out of editing so no tools linger once the session ends.
+    if (this.editingEnabled) this.toggleEditing();
   }
 
   createMap() {
@@ -588,6 +612,11 @@ class MapEditor {
     const properties = this.selected.properties || {};
     const geometryType = this.selected.geometry?.type || 'Feature';
     this.elements['feature-geometry'].textContent = t('featureMeta', { type: geometryType });
+    const createdBy = this.auth?.userName(properties.created_by);
+    const updatedBy = this.auth?.userName(properties.updated_by);
+    this.elements['feature-audit'].textContent = (createdBy || updatedBy)
+      ? t('featureAudit', { created: createdBy || '—', edited: updatedBy || '—' })
+      : '';
     this.elements['feature-name'].value = properties.name || '';
     this.elements['feature-description'].value = properties.description || '';
     this.elements['feature-icon'].value = properties.icon || '';

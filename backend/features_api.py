@@ -10,9 +10,10 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from auth import require_admin, require_user
 from config import FEATURE_QUERY_LIMIT, FULL_BASE_THRESHOLD
 from database import get_db
-from models import Feature
+from models import Feature, User
 from schemas import (
     AppMeta,
     FeatureCreate,
@@ -128,9 +129,15 @@ async def get_feature(feature_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/features", response_model=FeatureResponse)
-async def create_feature(feature: FeatureCreate, db: AsyncSession = Depends(get_db)):
+async def create_feature(
+    feature: FeatureCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_user),
+):
     db_feature = Feature(
         geometry=_geometry_or_422(feature.geometry),
+        created_by=user.id,
+        updated_by=user.id,
         **feature.model_dump(exclude={"geometry"}),
     )
     db.add(db_feature)
@@ -147,6 +154,7 @@ async def update_feature(
     feature_id: int,
     feature_update: FeatureUpdate,
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_user),
 ):
     result = await db.execute(select(Feature).where(Feature.id == feature_id))
     db_feature = result.scalar_one_or_none()
@@ -162,6 +170,7 @@ async def update_feature(
         update_data["geometry"] = _geometry_or_422(geometry)
     for attribute, value in update_data.items():
         setattr(db_feature, attribute, value)
+    db_feature.updated_by = user.id
 
     try:
         await db.commit()
@@ -177,8 +186,11 @@ async def update_feature(
 
 # Defined before /features/{feature_id} so the literal path wins the match.
 @router.delete("/features/clear-all")
-async def clear_all_features(db: AsyncSession = Depends(get_db)):
-    """Delete all features from the database."""
+async def clear_all_features(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Delete all features from the database (admin only — it wipes everything)."""
     result = await db.execute(delete(Feature))
     await db.commit()
     count = result.rowcount or 0
@@ -189,7 +201,11 @@ async def clear_all_features(db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/features/{feature_id}")
-async def delete_feature(feature_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_feature(
+    feature_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_user),
+):
     result = await db.execute(delete(Feature).where(Feature.id == feature_id))
     if not result.rowcount:
         raise HTTPException(status_code=404, detail="Feature not found")

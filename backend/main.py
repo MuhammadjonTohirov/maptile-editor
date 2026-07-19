@@ -4,14 +4,19 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+import auth_api
 import features_api
 import imports_api
+from auth import ensure_bootstrap_admin
 from config import CORS_ORIGINS
 from overpass import close_client
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Seed the first admin (if configured) before serving, so a fresh install is
+    # never left with editing unprotected.
+    await ensure_bootstrap_admin()
     yield
     await close_client()
 
@@ -27,6 +32,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_api.router)
 app.include_router(features_api.router)
 app.include_router(imports_api.router)
 

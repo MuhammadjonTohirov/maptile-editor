@@ -98,6 +98,36 @@ class AppMeta(BaseModel):
     full_base: bool
 
 
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=255)
+
+
+class UserOut(BaseModel):
+    """A user as returned to the editor — never includes the password hash."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    username: str
+    is_admin: bool
+    is_active: bool
+
+
+class CreateUserRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=8, max_length=255)
+    is_admin: bool = False
+
+
+class UpdateUserRequest(BaseModel):
+    """Admin edits to an account; absent fields stay untouched."""
+
+    password: Optional[str] = Field(default=None, min_length=8, max_length=255)
+    is_admin: Optional[bool] = None
+    is_active: Optional[bool] = None
+
+
 class BoundsRequest(BaseModel):
     west: float
     south: float
