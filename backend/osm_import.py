@@ -4,7 +4,7 @@ from typing import Callable, Optional
 
 from geoalchemy2.shape import from_shape
 from shapely.geometry import shape
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import (
@@ -296,6 +296,29 @@ IMPORT_KINDS = {
         build=_build_traffic_light,
     ),
 }
+
+
+_LINK_BUSINESSES_SQL = text(
+    "UPDATE features b SET building_id = sub.bid "
+    "FROM ("
+    "  SELECT b2.id, ("
+    "    SELECT f.id FROM features f "
+    "    WHERE f.feature_type = 'building' "
+    "      AND ST_Contains(f.geometry, b2.geometry) "
+    "    ORDER BY f.id LIMIT 1) AS bid "
+    "  FROM features b2 "
+    "  WHERE b2.feature_type = 'business' AND b2.building_id IS NULL"
+    ") sub "
+    "WHERE b.id = sub.id AND sub.bid IS NOT NULL"
+)
+
+
+async def link_businesses_to_buildings(db: AsyncSession) -> int:
+    """Register unlinked business points inside the building that contains them
+    (GIST index). Idempotent; safe to call after any business import."""
+    result = await db.execute(_LINK_BUSINESSES_SQL)
+    await db.commit()
+    return result.rowcount or 0
 
 
 def _build_candidates(kind: ImportKind, elements: list) -> list:

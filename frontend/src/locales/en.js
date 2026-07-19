@@ -97,6 +97,9 @@ export default {
   importRoads: 'Import roads',
   importStreetlights: 'Import street lights',
   importTrafficLights: 'Import traffic lights',
+  importBusinesses: 'Import businesses',
+  importOpen: 'Import…',
+  importAreaHint: 'Visible area only · center {lat}, {lon}',
   clearEditorData: 'Clear editor data',
   myLocation: 'My location',
   sectionHidden: 'Hidden basemap objects',
@@ -150,6 +153,7 @@ export default {
   kindRoads: 'roads',
   kindStreetlights: 'street lights',
   kindTrafficLights: 'traffic lights',
+  kindBusinesses: 'businesses',
   // Business registration
   typeBusiness: 'Business',
   labelBusinessType: 'Category',

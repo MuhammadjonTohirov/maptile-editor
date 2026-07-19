@@ -16,10 +16,8 @@ import argparse
 import asyncio
 import sys
 
-from sqlalchemy import text
-
 from database import async_session
-from osm_import import IMPORT_KINDS, run_import
+from osm_import import IMPORT_KINDS, link_businesses_to_buildings, run_import
 from schemas import BoundsRequest
 
 # west, south, east, north — small enough to satisfy the BoundsRequest area cap.
@@ -36,24 +34,7 @@ REGIONS: dict[str, tuple[float, float, float, float]] = {
 async def run(bounds: BoundsRequest) -> dict:
     async with async_session() as db:
         result = await run_import(IMPORT_KINDS["businesses"], bounds, db)
-        # Register each imported business inside its building (GIST index).
-        linked = await db.execute(text(
-            "UPDATE features b SET building_id = sub.bid "
-            "FROM ("
-            "  SELECT b2.id, ("
-            "    SELECT f.id FROM features f "
-            "    WHERE f.feature_type = 'building' "
-            "      AND ST_Contains(f.geometry, b2.geometry) "
-            "    ORDER BY f.id LIMIT 1) AS bid "
-            "  FROM features b2 "
-            "  WHERE b2.feature_type = 'business' "
-            "    AND b2.source_kind = 'osm_import' "
-            "    AND b2.building_id IS NULL"
-            ") sub "
-            "WHERE b.id = sub.id AND sub.bid IS NOT NULL"
-        ))
-        await db.commit()
-        result["linked_to_buildings"] = linked.rowcount or 0
+        result["linked_to_buildings"] = await link_businesses_to_buildings(db)
     return result
 
 

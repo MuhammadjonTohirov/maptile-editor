@@ -97,6 +97,9 @@ export default {
   importRoads: 'Импорт дорог',
   importStreetlights: 'Импорт уличных фонарей',
   importTrafficLights: 'Импорт светофоров',
+  importBusinesses: 'Импорт бизнесов',
+  importOpen: 'Импорт…',
+  importAreaHint: 'Только видимая область · центр {lat}, {lon}',
   clearEditorData: 'Очистить данные редактора',
   myLocation: 'Моё местоположение',
   sectionHidden: 'Скрытые объекты базовой карты',
@@ -150,6 +153,7 @@ export default {
   kindRoads: 'дороги',
   kindStreetlights: 'уличные фонари',
   kindTrafficLights: 'светофоры',
+  kindBusinesses: 'бизнесы',
   // Business registration
   typeBusiness: 'Бизнес',
   labelBusinessType: 'Категория',

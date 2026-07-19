@@ -97,6 +97,9 @@ export default {
   importRoads: 'Yoʻllarni import qilish',
   importStreetlights: 'Koʻcha chiroqlarini import qilish',
   importTrafficLights: 'Svetoforlarni import qilish',
+  importBusinesses: 'Bizneslarni import qilish',
+  importOpen: 'Import qilish…',
+  importAreaHint: 'Faqat koʻrinayotgan hudud · markaz {lat}, {lon}',
   clearEditorData: 'Muharrir maʼlumotlarini tozalash',
   myLocation: 'Mening joylashuvim',
   sectionHidden: 'Yashirilgan asos xarita obyektlari',
@@ -150,6 +153,7 @@ export default {
   kindRoads: 'yoʻllar',
   kindStreetlights: 'koʻcha chiroqlari',
   kindTrafficLights: 'svetoforlar',
+  kindBusinesses: 'bizneslar',
   // Business registration
   typeBusiness: 'Biznes',
   labelBusinessType: 'Turkum',

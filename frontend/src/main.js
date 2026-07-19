@@ -40,6 +40,7 @@ const IMPORT_KIND_KEYS = {
   roads: 'kindRoads',
   streetlights: 'kindStreetlights',
   'traffic-lights': 'kindTrafficLights',
+  businesses: 'kindBusinesses',
 };
 import './app.css';
 
@@ -120,7 +121,7 @@ class MapEditor {
         'business-hours', 'building-businesses', 'add-business',
         'feature-search', 'feature-search-options', 'hidden-objects',
         'save-feature', 'close-feature', 'clear-all', 'my-location',
-        'load-buildings', 'load-roads', 'load-streetlights', 'load-traffic-lights',
+        'open-import', 'import-popup', 'import-close', 'import-area', 'import-list',
       ].map((id) => [id, document.getElementById(id)]),
     );
 
@@ -315,10 +316,12 @@ class MapEditor {
     });
     this.elements['clear-all'].addEventListener('click', () => this.clearAll());
     this.elements['my-location'].addEventListener('click', () => this.goToUserLocation());
-    this.elements['load-buildings'].addEventListener('click', () => this.importOSM('buildings'));
-    this.elements['load-roads'].addEventListener('click', () => this.importOSM('roads'));
-    this.elements['load-streetlights'].addEventListener('click', () => this.importOSM('streetlights'));
-    this.elements['load-traffic-lights'].addEventListener('click', () => this.importOSM('traffic-lights'));
+    this.elements['open-import'].addEventListener('click', () => this.toggleImportPopup());
+    this.elements['import-close'].addEventListener('click', () => { this.elements['import-popup'].hidden = true; });
+    this.elements['import-list'].addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-kind]');
+      if (button) this.importOSM(button.dataset.kind, button);
+    });
     document.querySelectorAll('#icon-presets button').forEach((button) => {
       button.addEventListener('click', () => {
         this.elements['feature-icon'].value = 'clear' in button.dataset ? '' : button.textContent;
@@ -1101,8 +1104,21 @@ class MapEditor {
     setLayerVisibility(this.map, IMPORT_LAYERS, visible);
   }
 
-  async importOSM(kind) {
-    const button = this.elements[`load-${kind}`];
+  // The Import popup lists every OSM layer that can be pulled for the focused
+  // area; its header shows the map centre so it is clear the import is
+  // viewport-scoped, not global.
+  toggleImportPopup() {
+    const popup = this.elements['import-popup'];
+    if (popup.hidden) {
+      const centre = this.map.getCenter();
+      this.elements['import-area'].textContent = t('importAreaHint', {
+        lat: centre.lat.toFixed(4), lon: centre.lng.toFixed(4),
+      });
+    }
+    popup.hidden = !popup.hidden;
+  }
+
+  async importOSM(kind, button) {
     const original = button.textContent;
     button.disabled = true;
     button.textContent = t('importing');

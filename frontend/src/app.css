@@ -97,3 +97,11 @@ textarea { resize: vertical; }
 .admin-users li .inactive { color: #94a3b8; }
 .admin-actions { display: flex; flex-wrap: wrap; gap: 4px; }
 .admin-actions button { min-height: 24px; padding: 2px 7px; font-size: 11px; }
+
+/* Import popup: the single Import button expands this viewport-scoped list */
+.import-popup { margin: 8px 0 2px; padding: 10px; border: 1px solid #dbe3ec; border-radius: 10px; background: #f7fafc; }
+.import-popup[hidden] { display: none; }
+.import-popup .panel-heading { margin-bottom: 8px; }
+.import-popup .form-hint { margin: 0; }
+.import-list { display: grid; gap: 6px; }
+.import-list button { width: 100%; text-align: left; }

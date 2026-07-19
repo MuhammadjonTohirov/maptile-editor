@@ -55,12 +55,22 @@
     <section>
       <h2 data-i18n="sectionData">Data</h2>
       <div class="button-grid">
-        <button id="load-buildings" type="button" data-i18n="importBuildings">Import buildings</button>
-        <button id="load-roads" type="button" data-i18n="importRoads">Import roads</button>
-        <button id="load-streetlights" type="button" data-i18n="importStreetlights">Import street lights</button>
-        <button id="load-traffic-lights" type="button" data-i18n="importTrafficLights">Import traffic lights</button>
-        <button id="clear-all" class="danger" type="button" data-i18n="clearEditorData">Clear editor data</button>
+        <button id="open-import" type="button" data-i18n="importOpen">Import…</button>
         <button id="my-location" type="button" data-i18n="myLocation">My location</button>
+        <button id="clear-all" class="danger" type="button" data-i18n="clearEditorData">Clear editor data</button>
+      </div>
+      <div id="import-popup" class="import-popup" hidden>
+        <div class="panel-heading inline-heading">
+          <p id="import-area" class="form-hint"></p>
+          <button id="import-close" class="icon-button" type="button" aria-label="Close" data-i18n-aria-label="closeProperties">×</button>
+        </div>
+        <div id="import-list" class="import-list">
+          <button type="button" data-kind="buildings" data-i18n="importBuildings">Import buildings</button>
+          <button type="button" data-kind="roads" data-i18n="importRoads">Import roads</button>
+          <button type="button" data-kind="streetlights" data-i18n="importStreetlights">Import street lights</button>
+          <button type="button" data-kind="traffic-lights" data-i18n="importTrafficLights">Import traffic lights</button>
+          <button type="button" data-kind="businesses" data-i18n="importBusinesses">Import businesses</button>
+        </div>
       </div>
     </section>
 
