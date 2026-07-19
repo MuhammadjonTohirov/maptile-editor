@@ -92,6 +92,21 @@ The tile build downloads the Uzbekistan extract from Geofabrik and runs the
 pinned OpenMapTiles build pipeline. It produces zoom levels 0–14. Refresh it
 monthly, keeping the generated provenance manifest with the archive.
 
+## Deploy to a VPS
+
+```bash
+scripts/deploy.sh root@<vps-host> [https://your-domain]
+```
+
+One command over SSH: rsyncs the repo (code + the prebuilt tiles, not
+`db/data`), writes a production `.env` (generated `JWT_SECRET` + admin password,
+`FRONTEND_HOST_PORT=80`, `AUTH_COOKIE_SECURE` set from the URL scheme), builds
+the stack, and — only when missing — builds the basemap tiles and **bulk-loads
+the full Uzbekistan OSM** (skipped once the feature count clears
+`FULL_BASE_THRESHOLD`, so re-deploys are fast). The compose ports keep the DB and
+API on loopback; only the frontend is published. HTTPS still needs a TLS reverse
+proxy in front (then redeploy with an `https://` URL).
+
 ## Development commands
 
 ```bash

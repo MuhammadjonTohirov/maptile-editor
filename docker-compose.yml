@@ -9,7 +9,9 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: mapdata
     ports:
-      - "${POSTGRES_HOST_PORT:-5434}:5432"
+      # Bound to loopback so the database is never exposed on a VPS's public
+      # interface; only the frontend port is meant to be reachable.
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5434}:5432"
     volumes:
       # Schema comes exclusively from the migrations job (rule D1).
       - ./db/data:/var/lib/postgresql/data
@@ -43,16 +45,20 @@ services:
     # Dev-only auto-reload; the image default runs without it (rule X4).
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     ports:
-      - "8000:8000"
+      # Loopback only: production traffic reaches the API same-origin via nginx
+      # (/api). Direct :8000 is for local dev/docs, never the public interface.
+      - "127.0.0.1:8000:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/mapdata
-      - CORS_ORIGINS=http://localhost:3000
-      # Editor auth. CHANGE ALL THREE before exposing this beyond localhost:
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+      # Editor auth — parameterized so a deploy overrides them via .env. Dev
+      # defaults keep localhost working; scripts/deploy.sh writes real values.
       # JWT_SECRET signs sessions; ADMIN_* seeds the first admin only while the
-      # users table is empty. Set AUTH_COOKIE_SECURE=true when served over HTTPS.
-      - JWT_SECRET=dev-insecure-secret-change-in-production
-      - ADMIN_USERNAME=admin
-      - ADMIN_PASSWORD=changeme
+      # users table is empty; AUTH_COOKIE_SECURE=true once served over HTTPS.
+      - JWT_SECRET=${JWT_SECRET:-dev-insecure-secret-change-in-production}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
+      - AUTH_COOKIE_SECURE=${AUTH_COOKIE_SECURE:-}
     depends_on:
       migrations:
         condition: service_completed_successfully
@@ -92,7 +98,9 @@ services:
       dockerfile: frontend/Dockerfile
     container_name: map-editor-frontend
     ports:
-      - "3000:80"
+      # The only public port. Deploys set FRONTEND_HOST_PORT=80 (or front it
+      # with a TLS reverse proxy for HTTPS).
+      - "${FRONTEND_HOST_PORT:-3000}:80"
     depends_on:
       backend:
         condition: service_started
