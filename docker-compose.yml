@@ -123,8 +123,10 @@ services:
       dockerfile: frontend/Dockerfile
     container_name: map-editor-frontend
     ports:
-      # The only public port. Deploys set FRONTEND_HOST_PORT=80 (or front it
-      # with a TLS reverse proxy for HTTPS).
+      # Publishing target. Without TLS this is the only public port (deploys set
+      # FRONTEND_HOST_PORT=80). Under the `tls` profile the deploy sets it to a
+      # loopback bind (127.0.0.1:8080) so Caddy owns 80/443 and reaches the
+      # frontend over the internal network instead.
       - "${FRONTEND_HOST_PORT:-3000}:80"
     depends_on:
       backend:
@@ -132,3 +134,31 @@ services:
       martin:
         condition: service_healthy
     restart: unless-stopped
+
+  caddy:
+    # Auto-TLS reverse proxy. Dormant unless the `tls` profile is active, which
+    # scripts/deploy.sh turns on for an https:// deploy. Obtains/renews a
+    # Let's Encrypt cert for $DOMAIN and proxies to the frontend.
+    image: caddy:2-alpine
+    container_name: map-editor-caddy
+    profiles: ["tls"]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3
+    environment:
+      DOMAIN: ${DOMAIN:-}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data      # certificates — must persist across restarts
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  # Caddy's obtained certificates + ACME state; persisted so restarts don't
+  # re-request certs and hit Let's Encrypt rate limits.
+  caddy_data:
+  caddy_config:

@@ -33,7 +33,13 @@ JWT_SECRET="${JWT_SECRET:-$(gen_secret)}"
 ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(gen_secret | cut -c1-16)}"
 # The session cookie may only carry the Secure flag over HTTPS, or logins break.
-case "$PUBLIC_URL" in https://*) COOKIE_SECURE=true ;; *) COOKIE_SECURE=false ;; esac
+# An https:// URL also switches on the Caddy auto-TLS proxy (compose `tls`
+# profile): Caddy takes 80/443 and the frontend moves to a loopback bind so the
+# two don't clash. DOMAIN is the hostname Caddy requests a certificate for.
+case "$PUBLIC_URL" in
+  https://*) COOKIE_SECURE=true;  TLS=true;  DOMAIN="$HOST"; FRONTEND_PORT="127.0.0.1:8080" ;;
+  *)         COOKIE_SECURE=false; TLS=false; DOMAIN="";      FRONTEND_PORT="80" ;;
+esac
 
 echo "→ deploying to $VPS  (public: $PUBLIC_URL)"
 
@@ -51,18 +57,23 @@ JWT_SECRET=$JWT_SECRET
 ADMIN_USERNAME=$ADMIN_USERNAME
 ADMIN_PASSWORD=$ADMIN_PASSWORD
 AUTH_COOKIE_SECURE=$COOKIE_SECURE
-FRONTEND_HOST_PORT=80
+FRONTEND_HOST_PORT=$FRONTEND_PORT
+DOMAIN=$DOMAIN
 CORS_ORIGINS=$PUBLIC_URL
 ENV
 
 # --- 3. remote bootstrap: tiles (if missing) → stack → OSM load (if empty) --
 echo "→ building the stack on the server (tiles + OSM load run only if needed)…"
-ssh "$VPS" "REMOTE_DIR='$REMOTE_DIR' bash -s" <<'REMOTE'
+ssh "$VPS" "REMOTE_DIR='$REMOTE_DIR' TLS='$TLS' bash -s" <<'REMOTE'
 set -euo pipefail
 cd "$REMOTE_DIR"
 
 command -v docker >/dev/null 2>&1 || { echo "Docker is not installed on the VPS."; exit 1; }
 docker info >/dev/null 2>&1 || { echo "Docker daemon is not running on the VPS."; exit 1; }
+
+# An https:// deploy adds the Caddy auto-TLS proxy (compose `tls` profile).
+PROFILE=""
+[ "${TLS:-false}" = "true" ] && PROFILE="--profile tls"
 
 # Basemap tiles: transferred if built locally; otherwise built here (heavy).
 if [ ! -f tiles/osm_uzbekistan.mbtiles ]; then
@@ -71,17 +82,19 @@ if [ ! -f tiles/osm_uzbekistan.mbtiles ]; then
 fi
 
 # Build images (frontend bundles its own JS), run migrations, start everything.
-docker compose up -d --build
+docker compose $PROFILE up -d --build
 
+# Health-check the backend directly on loopback (:8000, un-prefixed routes) so
+# the probe is the same whether the front door is the frontend or Caddy.
 echo "  waiting for the stack to come up…"
 for _ in $(seq 1 40); do
-  curl -sf http://localhost/api/meta >/dev/null 2>&1 && break
+  curl -sf http://127.0.0.1:8000/meta >/dev/null 2>&1 && break
   sleep 3
 done
 
 # Load the full country only when the database is (nearly) empty. The
 # FULL_BASE_THRESHOLD is 50000; below it, run the one-time bulk load.
-COUNT=$(curl -s http://localhost/api/meta \
+COUNT=$(curl -s http://127.0.0.1:8000/meta \
   | python3 -c 'import sys,json;print(json.load(sys.stdin).get("feature_count",0))' 2>/dev/null || echo 0)
 if [ "${COUNT:-0}" -lt 50000 ]; then
   echo "  only ${COUNT:-0} features — bulk-loading the full Uzbekistan OSM extract (heavy)…"
@@ -90,14 +103,21 @@ else
   echo "  $COUNT features already loaded — skipping the OSM bulk load."
 fi
 
-docker compose ps
+docker compose $PROFILE ps
 REMOTE
 
 echo
 echo "✓ deployed → $PUBLIC_URL"
 echo "  admin login: $ADMIN_USERNAME / $ADMIN_PASSWORD"
 echo
-echo "Remaining hardening (not done by this script):"
-echo "  • Open port 80 (and 443) in the VPS firewall; the DB and API stay on loopback."
-echo "  • For HTTPS, front the frontend with a TLS reverse proxy (Caddy/nginx + certbot),"
-echo "    then redeploy with an https:// public-url so the session cookie gets Secure."
+if [ "$TLS" = true ]; then
+  echo "HTTPS: Caddy is fetching a Let's Encrypt cert for $DOMAIN."
+  echo "  • Point $DOMAIN's DNS A record at this VPS and open ports 80 + 443 in its firewall."
+  echo "  • The first request may take a few seconds while the cert is issued."
+else
+  echo "Currently HTTP only. For automatic HTTPS:"
+  echo "  • Point a domain's DNS A record at this VPS and open ports 80 + 443."
+  echo "  • Redeploy with an https:// URL, e.g. scripts/deploy.sh $VPS https://maps.example.com"
+  echo "    — that turns on the built-in Caddy auto-TLS proxy and the Secure session cookie."
+fi
+echo "  The DB and API stay on loopback; only the front door is public."

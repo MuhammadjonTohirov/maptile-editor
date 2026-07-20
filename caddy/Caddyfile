@@ -1,0 +1,11 @@
+# Auto-TLS reverse proxy, active only under the compose `tls` profile (an
+# https:// deploy). Caddy obtains and renews a Let's Encrypt certificate for
+# $DOMAIN automatically (HTTP-01 on :80 / TLS-ALPN-01 on :443, so both ports
+# must be open and DNS for $DOMAIN must point at this host), then proxies every
+# request to the frontend container over the internal compose network. The
+# frontend keeps serving same-origin /api, /tiles, and /fonts, so nothing about
+# the app's routing changes — only TLS termination moves out front.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy frontend:80
+}

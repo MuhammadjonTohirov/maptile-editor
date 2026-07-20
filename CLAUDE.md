@@ -104,8 +104,16 @@ One command over SSH: rsyncs the repo (code + the prebuilt tiles, not
 the stack, and — only when missing — builds the basemap tiles and **bulk-loads
 the full Uzbekistan OSM** (skipped once the feature count clears
 `FULL_BASE_THRESHOLD`, so re-deploys are fast). The compose ports keep the DB and
-API on loopback; only the frontend is published. HTTPS still needs a TLS reverse
-proxy in front (then redeploy with an `https://` URL).
+API on loopback; only the front door is published.
+
+Pass an `https://` URL and the deploy turns on **automatic HTTPS**: the compose
+`tls` profile starts a Caddy reverse proxy that obtains/renews a Let's Encrypt
+cert for the host, takes ports 80/443, and proxies to the frontend (which moves
+to a loopback bind so the two don't clash); the session cookie's `Secure` flag
+goes on at the same time. It needs the domain's DNS A record pointed at the VPS
+and ports 80 + 443 open. An IP-only / `http://` deploy stays plain HTTP with the
+frontend published directly (`caddy/Caddyfile` is the proxy config; cert state
+persists in the `caddy_data` volume).
 
 ## Backups
 
