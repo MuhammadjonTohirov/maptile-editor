@@ -61,7 +61,7 @@ let lastVersion = null;
 async function refreshEdits() {
   try {
     const version = await featuresApi.version();
-    const stamp = `${version.count}:${version.updated_at}`;
+    const stamp = `${version.revision}`;
     if (stamp === lastVersion) return;
     if (!fullBase) {
       const collection = await featuresApi.list();

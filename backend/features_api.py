@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from geoalchemy2.functions import ST_AsGeoJSON
 from geoalchemy2.shape import from_shape
 from shapely.geometry import shape
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -79,11 +79,12 @@ async def get_features(
 
 @router.get("/features/version", response_model=FeatureVersion)
 async def get_features_version(db: AsyncSession = Depends(get_db)):
-    """One aggregate row instead of the whole collection (rule B6): any
-    create, update, or delete changes the count or the max timestamp."""
-    result = await db.execute(select(func.count(Feature.id), func.max(Feature.updated_at)))
-    count, updated_at = result.one()
-    return FeatureVersion(count=count, updated_at=updated_at)
+    """O(1) change stamp (rule B6): read the single feature_stat row instead of
+    scanning the whole table. A statement-level trigger (migration 008) bumps its
+    revision on any create, update, or delete."""
+    result = await db.execute(text("SELECT revision, updated_at FROM feature_stat WHERE id"))
+    revision, updated_at = result.one()
+    return FeatureVersion(revision=revision, updated_at=updated_at)
 
 
 @router.get("/features/search", response_model=GeoJSONFeatureCollection)

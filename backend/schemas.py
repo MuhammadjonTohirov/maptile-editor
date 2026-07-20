@@ -83,9 +83,13 @@ class GeoJSONFeatureCollection(BaseModel):
 
 
 class FeatureVersion(BaseModel):
-    """Cheap change stamp: clients poll this instead of the full collection."""
+    """Cheap change stamp: clients poll this instead of the full collection.
 
-    count: int
+    Backed by the single-row feature_stat table (migration 008): a monotonic
+    revision bumped on any write, so the poll is an O(1) lookup instead of a
+    count(*)/max(updated_at) scan of the whole table."""
+
+    revision: int
     updated_at: Optional[datetime]
 
 
