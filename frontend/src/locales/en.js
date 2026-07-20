@@ -198,4 +198,12 @@ export default {
   authPasswordTooShort: 'Password must be at least 8 characters.',
   authUserExists: 'That username already exists.',
   featureAudit: 'Created by {created} · edited by {edited}',
+  // Admin bulk load
+  bulkLoadOpen: 'Bulk load…',
+  bulkLoadHeading: 'Bulk load OSM data',
+  bulkLoadSubtitle: 'Refreshes every building, road, and street-furniture feature from the latest OSM extract. This runs for several minutes.',
+  bulkLoadCountry: 'Country',
+  bulkLoadStart: 'Start bulk load',
+  bulkLoadRunning: 'A bulk load is already running.',
+  bulkLoadDone: 'Bulk load complete · {counts}',
 };

@@ -105,3 +105,8 @@ textarea { resize: vertical; }
 .import-popup .form-hint { margin: 0; }
 .import-list { display: grid; gap: 6px; }
 .import-list button { width: 100%; text-align: left; }
+
+/* Bulk-load progress bar */
+#bulk-load-progress { margin: 6px 0 4px; }
+.progress-track { height: 8px; border-radius: 5px; background: #e2e8f0; overflow: hidden; }
+.progress-bar { height: 100%; width: 0; background: #0969da; border-radius: 5px; transition: width .3s ease; }

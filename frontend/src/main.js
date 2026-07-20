@@ -10,6 +10,7 @@ import {
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
 import { featuresApi, isMissing } from './api.js';
 import { AuthController } from './auth-ui.js';
+import { BulkLoadUI } from './bulk-load-ui.js';
 import { captureBaseFilters, applyBaseFeatureMasks } from './base-masks.js';
 import {
   addTileSymbolLayers,
@@ -132,6 +133,10 @@ class MapEditor {
       onAuthenticated: (user) => this.onAuthenticated(user),
       onLoggedOut: () => this.onLoggedOut(),
     });
+    // Admin-only bulk load; refreshes the map when a load finishes.
+    this.bulkLoad = new BulkLoadUI({
+      onComplete: () => { this.refreshEditorTiles(); this.refreshEditorData(); },
+    });
 
     this.createMap();
     this.bindControls();
@@ -140,8 +145,10 @@ class MapEditor {
 
   onAuthenticated(user) {
     this.currentUser = user;
-    // Clearing all data is admin-only on the server; hide the button otherwise.
+    // Clearing all data and bulk loading are admin-only on the server; hide
+    // their buttons for non-admins.
     this.elements['clear-all'].hidden = !user.is_admin;
+    this.bulkLoad.setAdmin(user.is_admin);
     // A feature may already be open (session refreshed) — repaint its audit line.
     if (this.selected) this.showFeaturePanel();
   }

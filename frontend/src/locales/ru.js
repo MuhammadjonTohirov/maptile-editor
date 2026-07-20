@@ -198,4 +198,12 @@ export default {
   authPasswordTooShort: 'Пароль должен быть не менее 8 символов.',
   authUserExists: 'Такое имя пользователя уже существует.',
   featureAudit: 'Создал {created} · изменил {edited}',
+  // Admin bulk load
+  bulkLoadOpen: 'Массовая загрузка…',
+  bulkLoadHeading: 'Массовая загрузка данных OSM',
+  bulkLoadSubtitle: 'Обновляет все здания, дороги и уличные объекты из последнего экстракта OSM. Занимает несколько минут.',
+  bulkLoadCountry: 'Страна',
+  bulkLoadStart: 'Начать массовую загрузку',
+  bulkLoadRunning: 'Массовая загрузка уже выполняется.',
+  bulkLoadDone: 'Массовая загрузка завершена · {counts}',
 };

@@ -57,6 +57,7 @@
       <div class="button-grid">
         <button id="open-import" type="button" data-i18n="importOpen">Import…</button>
         <button id="my-location" type="button" data-i18n="myLocation">My location</button>
+        <button id="open-bulk-load" type="button" data-i18n="bulkLoadOpen" hidden>Bulk load…</button>
         <button id="clear-all" class="danger" type="button" data-i18n="clearEditorData">Clear editor data</button>
       </div>
       <div id="import-popup" class="import-popup" hidden>
@@ -194,6 +195,23 @@
       <label class="switch"><input id="admin-new-admin" type="checkbox"><span data-i18n="authAdminCheckbox">Administrator</span></label>
       <p id="admin-error" class="auth-error" role="alert"></p>
       <button id="admin-create" class="primary" type="button" data-i18n="authCreateUser">Create user</button>
+    </div>
+  </div>
+
+  <div id="bulk-load-modal" class="auth-overlay" hidden>
+    <div class="auth-card">
+      <div class="panel-heading inline-heading">
+        <h2 data-i18n="bulkLoadHeading">Bulk load OSM data</h2>
+        <button id="bulk-load-close" class="icon-button" type="button" aria-label="Close" data-i18n-aria-label="closeProperties">×</button>
+      </div>
+      <p class="auth-sub" data-i18n="bulkLoadSubtitle">Refreshes every building, road, and street-furniture feature from the latest OSM extract. This runs for several minutes.</p>
+      <label><span data-i18n="bulkLoadCountry">Country</span><select id="bulk-load-country"></select></label>
+      <div id="bulk-load-progress" hidden>
+        <p id="bulk-load-stage" class="form-hint"></p>
+        <div class="progress-track"><div id="bulk-load-bar" class="progress-bar"></div></div>
+      </div>
+      <p id="bulk-load-error" class="auth-error" role="alert"></p>
+      <button id="bulk-load-start" class="primary" type="button" data-i18n="bulkLoadStart">Start bulk load</button>
     </div>
   </div>
 

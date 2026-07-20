@@ -64,6 +64,8 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./backend:/app
+      # The bulk-load transform SQL lives in scripts/; the backend runs it.
+      - ./scripts:/scripts:ro
     dns:
       - 8.8.8.8
       - 8.8.4.4

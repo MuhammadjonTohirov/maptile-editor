@@ -98,6 +98,10 @@ class AppMeta(BaseModel):
     full_base: bool
 
 
+class BulkLoadRequest(BaseModel):
+    country: str = Field(min_length=1, max_length=64)
+
+
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=1, max_length=255)

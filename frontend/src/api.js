@@ -57,6 +57,13 @@ export const featuresApi = {
   importOsm: (kind, bounds) => request(`/api/load-osm-${kind}`, { method: 'POST', body: bounds }),
 };
 
+// Admin-only, on-demand full-country OSM bulk load.
+export const bulkApi = {
+  countries: () => request('/api/bulk-load/countries'),
+  status: () => request('/api/bulk-load/status'),
+  start: (country) => request('/api/bulk-load', { method: 'POST', body: { country } }),
+};
+
 // Auth + user management. The session lives in an httpOnly cookie the browser
 // sends automatically, so there is no token to attach here.
 export const authApi = {

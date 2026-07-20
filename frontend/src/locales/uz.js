@@ -198,4 +198,12 @@ export default {
   authPasswordTooShort: 'Parol kamida 8 ta belgidan iborat boʻlishi kerak.',
   authUserExists: 'Bunday foydalanuvchi nomi allaqachon mavjud.',
   featureAudit: 'Yaratdi: {created} · tahrirladi: {edited}',
+  // Admin bulk load
+  bulkLoadOpen: 'Ommaviy yuklash…',
+  bulkLoadHeading: 'OSM maʼlumotlarini ommaviy yuklash',
+  bulkLoadSubtitle: 'Har bir bino, yoʻl va koʻcha jihozini eng soʻnggi OSM ekstraktidan yangilaydi. Bu bir necha daqiqa davom etadi.',
+  bulkLoadCountry: 'Davlat',
+  bulkLoadStart: 'Ommaviy yuklashni boshlash',
+  bulkLoadRunning: 'Ommaviy yuklash allaqachon bajarilmoqda.',
+  bulkLoadDone: 'Ommaviy yuklash tugadi · {counts}',
 };

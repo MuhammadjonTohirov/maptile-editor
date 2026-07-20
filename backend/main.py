@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import auth_api
+import bulk_api
 import features_api
 import imports_api
 from auth import ensure_bootstrap_admin
@@ -33,6 +34,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_api.router)
+app.include_router(bulk_api.router)
 app.include_router(features_api.router)
 app.include_router(imports_api.router)
 
