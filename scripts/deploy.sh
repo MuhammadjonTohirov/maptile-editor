@@ -40,7 +40,7 @@ echo "→ deploying to $VPS  (public: $PUBLIC_URL)"
 # --- 1. sync the repo (code + prebuilt tiles; not data/artifacts) ----------
 echo "→ syncing files…"
 rsync -az --delete \
-  --exclude '.git' --exclude 'db/data' --exclude 'node_modules' \
+  --exclude '.git' --exclude 'db/data' --exclude 'backups' --exclude 'node_modules' \
   --exclude '__pycache__' --exclude '*.pyc' --exclude '.venv' \
   ./ "$VPS:$REMOTE_DIR/"
 

@@ -22,6 +22,29 @@ services:
       retries: 20
     restart: unless-stopped
 
+  db-backup:
+    # Same major as the db (postgis/postgis:15) so pg_dump matches the server.
+    image: postgres:15-alpine
+    container_name: map-editor-db-backup
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: mapdata
+      # Nightly by default; keep the newest 7. Override via .env on a deploy.
+      BACKUP_INTERVAL: ${BACKUP_INTERVAL:-86400}
+      BACKUP_KEEP: ${BACKUP_KEEP:-7}
+    volumes:
+      # Dumps land here (gitignored, rsync-excluded so a deploy never wipes them).
+      - ./backups:/backups
+      - ./scripts:/scripts:ro
+    entrypoint: ["sh", "/scripts/backup-loop.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   migrations:
     image: postgres:15-alpine
     container_name: map-editor-migrations

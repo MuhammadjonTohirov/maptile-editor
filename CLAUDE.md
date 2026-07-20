@@ -107,6 +107,29 @@ the full Uzbekistan OSM** (skipped once the feature count clears
 API on loopback; only the frontend is published. HTTPS still needs a TLS reverse
 proxy in front (then redeploy with an `https://` URL).
 
+## Backups
+
+The `db-backup` compose service runs `scripts/backup-loop.sh`: a compressed
+`pg_dump -Fc` of the whole database on start and every `BACKUP_INTERVAL` seconds
+(default 24 h), pruned to the newest `BACKUP_KEEP` (default 7). Dumps land in
+`backups/` (gitignored; rsync-excluded so a deploy never wipes them). pg_dump
+takes an MVCC snapshot, so backups never block editing (~20 s / ~220 MB for the
+full country). Prune sorts by the ISO-8601 timestamp in each filename, not
+mtime. Override cadence/retention via `.env` (`BACKUP_INTERVAL`, `BACKUP_KEEP`).
+
+Restore is **destructive** and operator-run — stop the services holding
+connections first, then run `scripts/restore-db.sh` inside the service:
+
+```bash
+docker compose stop backend martin
+docker compose run --rm --entrypoint sh db-backup \
+    /scripts/restore-db.sh /backups/mapdata-YYYYMMDDTHHMMSSZ.dump
+docker compose start backend martin
+```
+
+`backups/` holds only the VPS's own copies; ship them off-box separately if you
+need off-site retention.
+
 ## Development commands
 
 ```bash

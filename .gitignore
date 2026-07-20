@@ -38,6 +38,7 @@ env/
 
 # Database
 db/data/
+backups/
 *.db
 *.sqlite
 *.sqlite3
