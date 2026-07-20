@@ -11,6 +11,7 @@ import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
 import { featuresApi, isMissing } from './api.js';
 import { AuthController } from './auth-ui.js';
 import { BulkLoadUI } from './bulk-load-ui.js';
+import { FeatureMenuUI } from './feature-menu.js';
 import { captureBaseFilters, applyBaseFeatureMasks } from './base-masks.js';
 import {
   addTileSymbolLayers,
@@ -20,11 +21,15 @@ import {
 } from './basemap-render.js';
 import { enableEmojiIcons, featureAnchors } from './emoji-icons.js';
 import {
+  circularise,
   collectVertices,
   drawingModeForGeometry,
+  flipLong,
+  flipShort,
   geometryBounds,
   normalizeGeometry,
   offsetGeometry,
+  orthogonalize,
 } from './geometry.js';
 import {
   BASE_EDITABLE_LAYERS,
@@ -136,6 +141,11 @@ class MapEditor {
     // Admin-only bulk load; refreshes the map when a load finishes.
     this.bulkLoad = new BulkLoadUI({
       onComplete: () => { this.refreshEditorTiles(); this.refreshEditorData(); },
+    });
+    // Right-click operations menu for the selected feature (Circularise,
+    // Square, Flip, Copy, Delete).
+    this.featureMenu = new FeatureMenuUI({
+      onOperation: (op) => this.handleFeatureMenuOperation(op),
     });
 
     this.createMap();
@@ -258,6 +268,11 @@ class MapEditor {
 
       this.clearSelection();
     });
+    // Only opens the ops menu when the right-click lands on the already-
+    // selected feature; a right-click elsewhere (including on a Terra Draw
+    // vertex handle, whose layers aren't in interactiveLayers, so its own
+    // right-click-to-delete-vertex behavior is untouched) is a no-op here.
+    this.map.on('contextmenu', (event) => this.handleContextMenu(event));
     this.map.on('moveend', () => {
       if (this.fullBase) {
         // The whole country is already loaded; only the viewport's snapping
@@ -815,6 +830,61 @@ class MapEditor {
     } catch (error) {
       console.error('Unable to duplicate feature', error);
       this.setStatus(t('duplicateFailed'), true);
+    }
+  }
+
+  // MapLibre auto-suppresses the native context menu as soon as any
+  // 'contextmenu' map listener exists, and browsers withhold that DOM event
+  // after a right-click-*drag* — so right-click-drag camera rotation
+  // (MapLibre's default dragRotate) still reaches this map unaffected; only a
+  // stationary right-click ever gets here.
+  handleContextMenu(event) {
+    if (!this.editingEnabled || !this.selected) return;
+    const reach = 6;
+    const clickBox = [
+      [event.point.x - reach, event.point.y - reach],
+      [event.point.x + reach, event.point.y + reach],
+    ];
+    const rendered = this.map.queryRenderedFeatures(clickBox, { layers: this.interactiveLayers });
+    const hitSelected = rendered.some((feature) =>
+      String(feature.id ?? feature.properties?.id) === this.selected.serverId);
+    if (!hitSelected) return;
+    this.featureMenu.open(event.originalEvent.clientX, event.originalEvent.clientY, this.selected.geometry?.type);
+  }
+
+  handleFeatureMenuOperation(op) {
+    if (op === 'copy') { this.duplicateSelected(); return; }
+    if (op === 'delete') { this.deleteSelected(); return; }
+    const transform = { circularise, square: orthogonalize, flipLong, flipShort }[op];
+    if (transform) this.applyGeometryTransform(transform);
+  }
+
+  // Circularise/Square/Flip only reshape the geometry; everything else about
+  // the feature is carried over unchanged, same as saveProperties.
+  async applyGeometryTransform(transform) {
+    if (!this.editingEnabled || !this.selected) return;
+    const serverId = this.selected.serverId;
+    const previous = { geometry: this.selected.geometry, properties: { ...this.selected.properties } };
+    const geometry = transform(previous.geometry);
+    if (!geometry) {
+      this.setStatus(t('geometryOpFailed'), true);
+      return;
+    }
+    try {
+      const saved = await featuresApi.update(serverId, this.rawFeaturePayload(geometry, previous.properties));
+      this.pushUndo(() => featuresApi.update(serverId, this.rawFeaturePayload(previous.geometry, previous.properties)));
+      this.adoptSavedFeature(saved);
+      this.refreshEditorTiles();
+      await this.refreshEditorData();
+      this.beginGeometryEditing(serverId, saved.geometry);
+      this.setStatus(t('geometryOpApplied'));
+    } catch (error) {
+      if (isMissing(error)) {
+        await this.handleMissingFeature(t('featureMissingSave'));
+        return;
+      }
+      console.error('Unable to apply geometry operation', error);
+      this.setStatus(t('geometryOpFailed'), true);
     }
   }
 

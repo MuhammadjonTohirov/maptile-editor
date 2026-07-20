@@ -206,4 +206,11 @@ export default {
   bulkLoadStart: 'Начать массовую загрузку',
   bulkLoadRunning: 'Массовая загрузка уже выполняется.',
   bulkLoadDone: 'Массовая загрузка завершена · {counts}',
+  // Right-click feature operations menu
+  opCircularise: 'Округлить',
+  opSquare: 'Выпрямить углы',
+  opFlipLong: 'Отразить по длинной оси',
+  opFlipShort: 'Отразить по короткой оси',
+  geometryOpApplied: 'Форма обновлена',
+  geometryOpFailed: 'Не удалось обновить форму',
 };

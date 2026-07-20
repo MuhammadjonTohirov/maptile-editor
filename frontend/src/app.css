@@ -106,6 +106,22 @@ textarea { resize: vertical; }
 .import-list { display: grid; gap: 6px; }
 .import-list button { width: 100%; text-align: left; }
 
+/* Right-click feature operations menu */
+.feature-context-menu {
+  position: fixed;
+  z-index: 15;
+  width: 170px;
+  padding: 6px;
+  background: rgb(255 255 255 / 97%);
+  border: 1px solid rgb(255 255 255 / 70%);
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgb(18 32 55 / 24%);
+  backdrop-filter: blur(12px);
+}
+.feature-context-menu[hidden] { display: none; }
+.feature-context-menu-list { display: grid; gap: 4px; }
+.feature-context-menu-list button { width: 100%; text-align: left; }
+
 /* Bulk-load progress bar */
 #bulk-load-progress { margin: 6px 0 4px; }
 .progress-track { height: 8px; border-radius: 5px; background: #e2e8f0; overflow: hidden; }

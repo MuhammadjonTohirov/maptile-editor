@@ -46,6 +46,140 @@ function roundCoordinates(value) {
   return Number(value.toFixed(COORDINATE_PRECISION));
 }
 
+function averageLat(points) {
+  return points.reduce((sum, [, lat]) => sum + lat, 0) / points.length;
+}
+
+// Longitude degrees shrink toward the poles; this keeps the ops below acting
+// on roughly-Cartesian meters instead of distorting east-west distances
+// (same correction snapToEditorVertex uses in main.js).
+function toXY(points, originLat) {
+  const scale = Math.cos((originLat * Math.PI) / 180);
+  return points.map(([lng, lat]) => [lng * scale, lat]);
+}
+
+function toLngLat(points, originLat) {
+  const scale = Math.cos((originLat * Math.PI) / 180);
+  return points.map(([x, y]) => [x / scale, y]);
+}
+
+function centroid(points) {
+  const [sx, sy] = points.reduce(([ax, ay], [x, y]) => [ax + x, ay + y], [0, 0]);
+  return [sx / points.length, sy / points.length];
+}
+
+// Circular mean of each edge's direction folded into a 90° wedge, weighted by
+// edge length, so a building's own orientation is found even when it isn't
+// aligned to true north.
+function dominantAngle(ring) {
+  const n = ring.length;
+  let sinSum = 0;
+  let cosSum = 0;
+  for (let i = 0; i < n; i += 1) {
+    const [x1, y1] = ring[i];
+    const [x2, y2] = ring[(i + 1) % n];
+    const length = Math.hypot(x2 - x1, y2 - y1);
+    if (!length) continue;
+    const folded = Math.atan2(y2 - y1, x2 - x1) * 4;
+    sinSum += Math.sin(folded) * length;
+    cosSum += Math.cos(folded) * length;
+  }
+  return sinSum || cosSum ? Math.atan2(sinSum, cosSum) / 4 : 0;
+}
+
+// Replaces the ring with points evenly spaced on the circle fit to its
+// centroid and average radius (RapiD/iD's "Circularise").
+export function circularise(geometry) {
+  if (geometry.type !== 'Polygon') return null;
+  const ring = geometry.coordinates[0].slice(0, -1);
+  if (ring.length < 3) return null;
+  const originLat = averageLat(ring);
+  const xy = toXY(ring, originLat);
+  const [cx, cy] = centroid(xy);
+  const radius = xy.reduce((sum, [x, y]) => sum + Math.hypot(x - cx, y - cy), 0) / xy.length;
+  const startAngle = Math.atan2(xy[0][1] - cy, xy[0][0] - cx);
+  const count = Math.max(ring.length, 24);
+  const circle = Array.from({ length: count }, (_, i) => {
+    const angle = startAngle + (i / count) * 2 * Math.PI;
+    return [cx + radius * Math.cos(angle), cy + radius * Math.sin(angle)];
+  });
+  const points = toLngLat(circle, originLat);
+  points.push(points[0]);
+  return { type: 'Polygon', coordinates: [roundCoordinates(points)] };
+}
+
+// Squares a polygon's corners toward 90°/180° (RapiD/iD's "Orthogonalize"):
+// rotate to the shape's own dominant angle, snap each edge to horizontal or
+// vertical, then let each vertex take its shared coordinate from the two
+// edges that meet there.
+export function orthogonalize(geometry) {
+  if (geometry.type !== 'Polygon') return null;
+  const ring = geometry.coordinates[0].slice(0, -1);
+  const n = ring.length;
+  if (n < 4) return null;
+  const originLat = averageLat(ring);
+  const xy = toXY(ring, originLat);
+  const theta = dominantAngle(xy);
+  const cosT = Math.cos(theta);
+  const sinT = Math.sin(theta);
+  const rotated = xy.map(([x, y]) => [x * cosT + y * sinT, -x * sinT + y * cosT]);
+
+  const isHorizontal = rotated.map((point, i) => {
+    const next = rotated[(i + 1) % n];
+    return Math.abs(next[0] - point[0]) >= Math.abs(next[1] - point[1]);
+  });
+  const sum = rotated.map(() => [0, 0]);
+  const count = rotated.map(() => [0, 0]);
+  for (let i = 0; i < n; i += 1) {
+    const a = i;
+    const b = (i + 1) % n;
+    const axis = isHorizontal[i] ? 1 : 0; // shared y for a horizontal edge, shared x for a vertical one
+    const value = (rotated[a][axis] + rotated[b][axis]) / 2;
+    sum[a][axis] += value; count[a][axis] += 1;
+    sum[b][axis] += value; count[b][axis] += 1;
+  }
+  const squared = rotated.map((point, i) => [
+    count[i][0] ? sum[i][0] / count[i][0] : point[0],
+    count[i][1] ? sum[i][1] / count[i][1] : point[1],
+  ]);
+  const unrotated = squared.map(([x, y]) => [x * cosT - y * sinT, x * sinT + y * cosT]);
+  const points = toLngLat(unrotated, originLat);
+  points.push(points[0]);
+  return { type: 'Polygon', coordinates: [roundCoordinates(points)] };
+}
+
+// Mirrors the geometry across the axis through its centroid, along its own
+// long or short dimension (found the same way orthogonalize finds its
+// dominant angle for a polygon; a line's axis is simply its own start→end
+// direction).
+function flip(geometry, mirrorLongAxis) {
+  const isPolygon = geometry.type === 'Polygon';
+  if (!isPolygon && geometry.type !== 'LineString') return null;
+  const ring = isPolygon ? geometry.coordinates[0].slice(0, -1) : geometry.coordinates;
+  if (ring.length < 2) return null;
+  const originLat = averageLat(ring);
+  const xy = toXY(ring, originLat);
+  const [cx, cy] = centroid(xy);
+  const theta = isPolygon
+    ? dominantAngle(xy)
+    : Math.atan2(xy[xy.length - 1][1] - xy[0][1], xy[xy.length - 1][0] - xy[0][0]);
+  const cosT = Math.cos(theta);
+  const sinT = Math.sin(theta);
+  const local = xy.map(([x, y]) => [(x - cx) * cosT + (y - cy) * sinT, -(x - cx) * sinT + (y - cy) * cosT]);
+  const width = Math.max(...local.map(([x]) => x)) - Math.min(...local.map(([x]) => x));
+  const height = Math.max(...local.map(([, y]) => y)) - Math.min(...local.map(([, y]) => y));
+  const longIsX = width >= height;
+  const mirrorY = mirrorLongAxis ? longIsX : !longIsX;
+  const mirrored = local.map(([x, y]) => (mirrorY ? [x, -y] : [-x, y]));
+  const world = mirrored.map(([x, y]) => [x * cosT - y * sinT + cx, x * sinT + y * cosT + cy]);
+  const points = toLngLat(world, originLat);
+  if (isPolygon) points.push(points[0]);
+  return { type: geometry.type, coordinates: isPolygon ? [roundCoordinates(points)] : roundCoordinates(points) };
+}
+
+export function flipLong(geometry) { return flip(geometry, true); }
+export function flipShort(geometry) { return flip(geometry, false); }
+
 export function drawingModeForGeometry(geometry) {
   return {
     Point: 'point',

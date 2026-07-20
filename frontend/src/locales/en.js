@@ -206,4 +206,11 @@ export default {
   bulkLoadStart: 'Start bulk load',
   bulkLoadRunning: 'A bulk load is already running.',
   bulkLoadDone: 'Bulk load complete · {counts}',
+  // Right-click feature operations menu
+  opCircularise: 'Circularise',
+  opSquare: 'Square',
+  opFlipLong: 'Flip long',
+  opFlipShort: 'Flip short',
+  geometryOpApplied: 'Shape updated',
+  geometryOpFailed: 'Unable to update the shape',
 };

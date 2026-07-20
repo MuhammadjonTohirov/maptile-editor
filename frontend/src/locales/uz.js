@@ -206,4 +206,11 @@ export default {
   bulkLoadStart: 'Ommaviy yuklashni boshlash',
   bulkLoadRunning: 'Ommaviy yuklash allaqachon bajarilmoqda.',
   bulkLoadDone: 'Ommaviy yuklash tugadi · {counts}',
+  // Right-click feature operations menu
+  opCircularise: 'Dumaloqlashtirish',
+  opSquare: 'Burchaklarni toʻgʻrilash',
+  opFlipLong: 'Uzun oʻq boʻylab aks ettirish',
+  opFlipShort: 'Qisqa oʻq boʻylab aks ettirish',
+  geometryOpApplied: 'Shakl yangilandi',
+  geometryOpFailed: 'Shaklni yangilab boʻlmadi',
 };
