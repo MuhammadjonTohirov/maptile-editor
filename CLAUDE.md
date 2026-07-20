@@ -161,6 +161,13 @@ backend is volume-mounted and reloads on save.
   mapping as the per-area importer, ON CONFLICT on OSM identity keeps it
   idempotent). It is a heavy maintenance operation like the tile build, run
   against the running stack. `LOAD_BBOX="w s e n"` loads a sub-region.
+- The same load is available on demand to admins from the editor (`bulk_load.py`
+  + `bulk_api.py`): a modal with a country dropdown starts a background job and a
+  progress bar polls `/api/bulk-load/status`. The backend runs `ogr2ogr` + `psql`
+  as subprocesses (both are in the backend image; the transform SQL is mounted at
+  `/scripts`), reusing the same pipeline with no Docker socket. One load at a
+  time. Per-area imports use the `Import…` popup (buildings/roads/street
+  furniture/traffic lights/businesses, scoped to the map viewport).
 - Once the dataset crosses `FULL_BASE_THRESHOLD` (default 50 000 features)
   `/api/meta` reports `full_base`, and both the editor and client switch to
   full-base rendering: base OSM detail is hidden and the whole map is drawn
