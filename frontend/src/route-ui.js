@@ -17,6 +17,7 @@ export class RouteUI {
     this.profile = 'foot';
     this.points = { a: null, b: null };
     this.computeRevision = 0;
+    this.networkOutdated = false;
 
     elements['find-route'].addEventListener('click', () => this.arm());
     elements['clear-route'].addEventListener('click', () => this.clear());
@@ -83,10 +84,11 @@ export class RouteUI {
         type: 'FeatureCollection',
         features: [{ type: 'Feature', geometry: result.geometry, properties: {} }],
       });
-      this.show(t('routeResult', {
+      this.networkOutdated = Boolean(result.network_stale);
+      this.show(t(result.network_stale ? 'routeResultOutdated' : 'routeResult', {
         km: (result.distance_m / 1000).toFixed(1),
         minutes: Math.round(result.duration_s / 60),
-      }));
+      }), Boolean(result.network_stale));
     } catch (error) {
       if (revision !== this.computeRevision) return;
       this.map.getSource('route_line')?.setData({ type: 'FeatureCollection', features: [] });
@@ -103,10 +105,26 @@ export class RouteUI {
     this.onStatus(message, isError);
   }
 
+  invalidateNetwork() {
+    this.computeRevision += 1;
+    this.networkOutdated = true;
+    this.map.getSource('route_line')?.setData({ type: 'FeatureCollection', features: [] });
+    if (this.points.a || this.points.b) {
+      this.elements['clear-route'].disabled = false;
+      this.show(t('routeOutdated'), true);
+    }
+  }
+
+  async refreshAfterRebuild() {
+    this.networkOutdated = false;
+    if (this.points.a && this.points.b) await this.compute();
+  }
+
   clear() {
     this.computeRevision += 1;
     this.picking = null;
     this.points = { a: null, b: null };
+    this.networkOutdated = false;
     this.elements['clear-route'].disabled = true;
     this.elements['route-status'].textContent = '';
     this.map.getSource('route_points')?.setData({ type: 'FeatureCollection', features: [] });

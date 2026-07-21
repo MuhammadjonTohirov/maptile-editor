@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import (
     Feature,
-    SOURCE_KIND_BASE_TOMBSTONE,
     SOURCE_KIND_OSM_IMPORT,
 )
 from overpass import (
@@ -28,7 +27,7 @@ from schemas import BoundsRequest
 # already set. An empty name is backfilled from OSM below.
 _REPLACEABLE_ATTRIBUTES = (
     "description", "geometry", "properties", "building_number",
-    "building_type", "icon", "osm_id", "osm_type", "source_kind",
+    "building_type", "icon", "osm_id", "osm_type",
     "feature_type", "height_m", "road_type", "direction", "lane_count",
     "max_speed", "surface", "business_type",
 )
@@ -334,6 +333,16 @@ def _build_candidates(kind: ImportKind, elements: list) -> list:
     return candidates
 
 
+def _can_refresh_from_osm(feature: Feature) -> bool:
+    """Only untouched imports belong to the OSM refresh pipeline.
+
+    A user edit promotes an imported feature to ``manual``. Tombstones and
+    those local overrides retain the OSM identity for deduplication, but their
+    editor-owned geometry and attributes must remain authoritative.
+    """
+    return feature.source_kind == SOURCE_KIND_OSM_IMPORT
+
+
 async def run_import(kind: ImportKind, bounds: BoundsRequest, db: AsyncSession) -> dict:
     osm_data = await fetch_overpass(kind.query(bounds))
     candidates = _build_candidates(kind, osm_data.get("elements", []))
@@ -350,8 +359,9 @@ async def run_import(kind: ImportKind, bounds: BoundsRequest, db: AsyncSession) 
     imported = 0
     for candidate in candidates:
         existing = existing_by_osm_id.get(candidate.osm_id)
-        if existing is not None and existing.source_kind == SOURCE_KIND_BASE_TOMBSTONE:
-            # Deleted through the editor; re-importing must not resurrect it.
+        if existing is not None and not _can_refresh_from_osm(existing):
+            # Deleted or edited through the editor; re-importing must neither
+            # resurrect tombstones nor overwrite durable local overrides.
             continue
         if existing is not None:
             for attribute in _REPLACEABLE_ATTRIBUTES:

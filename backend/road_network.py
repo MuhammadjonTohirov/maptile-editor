@@ -88,6 +88,14 @@ async def network_ready(db: AsyncSession) -> bool:
     return bool(result.scalar_one())
 
 
+async def network_state(db: AsyncSession) -> dict[str, bool]:
+    row = (await db.execute(text(
+        "SELECT published_at IS NOT NULL AS ready, is_stale "
+        "FROM road_network_build_state WHERE id = 1"
+    ))).one()
+    return {"ready": bool(row.ready), "is_stale": bool(row.is_stale)}
+
+
 def _excluded_sql(profile: str) -> str:
     return ", ".join(f"'{road_type}'" for road_type in PROFILES[profile]["exclude"])
 

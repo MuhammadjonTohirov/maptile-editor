@@ -14,7 +14,9 @@ PostGIS editor features ──────────────────�
 The OSM basemap archive is read-only. With editing enabled, selecting a
 building, road, waterway, or POI creates an editable local PostGIS copy above
 the basemap; user-created data and explicitly imported OSM copies use the same
-overlay. The source MBTiles archive is never modified at runtime.
+overlay. Saving an imported feature promotes it to a protected local override,
+so later viewport OSM refreshes cannot restore its old geometry or attributes.
+The source MBTiles archive is never modified at runtime.
 
 ## First run
 
@@ -80,14 +82,17 @@ road endpoint placed within the editor's eight-metre snap range is projected
 onto the nearest host road and only that host road is split in the derived
 graph. Work is performed in committed shadow-table batches and the finished
 graph is published atomically, so a previously built graph remains available
-during later rebuilds.
+during later rebuilds. Every road write marks the graph stale; a rebuild only
+publishes when its captured road revision is still current.
 
 Road edits refresh rendered vector tiles immediately but do not silently mutate
-the routing graph. Run a rebuild after adding, removing, or reshaping roads. A
+the routing graph. Geometry edits remain drafts until Save, while Cancel or
+Escape keeps the stored original. Run a rebuild after adding, removing, or reshaping roads. A
 manual road endpoint must show the snap ring/green connectivity marker; merely
 crossing a road line away from an endpoint does not create a routable junction.
-Road class, access, direction, lanes, speed, and surface are selected from
-controlled values rather than typed free-form. Car routing rejects pedestrian
+Road class, access, direction, lanes, and surface use controlled selections.
+Vehicle-capable classes accept a numeric speed with a class-based default;
+walking/cycling-only classes do not expose speed. Car routing rejects pedestrian
 classes and access restrictions and penalizes service-road shortcuts in favor
 of appropriate through roads.
 

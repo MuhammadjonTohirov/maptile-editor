@@ -8,7 +8,7 @@ import {
   TerraDrawSelectMode,
 } from 'terra-draw';
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
-import { featuresApi, isMissing } from './api.js';
+import { ApiError, featuresApi, isMissing } from './api.js';
 import { AuthController } from './auth-ui.js';
 import { BulkLoadUI } from './bulk-load-ui.js';
 import { FeatureMenuUI } from './feature-menu.js';
@@ -36,8 +36,17 @@ import {
   RoadSegmentIndex,
 } from './geometry.js';
 import {
+  canSnapRoadCoordinate,
+  RoadEditSession,
+  ROAD_SNAP_DEGREES,
+  snapRoadEndpoints,
+  validateRoadLineString,
+} from './road-editing.js';
+import {
+  isVehicleRoadType,
   populateRoadControls,
   setControlledSelectValue,
+  updateRoadSpeedControl,
 } from './road-options.js';
 import {
   BASE_EDITABLE_LAYERS,
@@ -123,26 +132,28 @@ class MapEditor {
     this.snapIndicatorKey = null;
     this.pendingDrawFeatureType = null;
     this.pendingRoadType = null;
+    this.roadEditSession = new RoadEditSession();
+    this.visibleFeatures = [];
     this.preparedRoadAreas = [];
     this.preparingRoads = false;
     this.roadPrepareCooldown = 0;
     this.roadPrepareTimer = null;
     this.elements = Object.fromEntries(
       [
-        'status', 'zoom-level', 'feature-count', 'toggle-editing', 'draw-point',
+        'status', 'edit-state', 'zoom-level', 'feature-count', 'toggle-editing', 'draw-point',
         'draw-line', 'draw-polygon', 'draw-rect', 'draw-circle', 'select',
         'undo-edit', 'duplicate-feature', 'delete-feature', 'toggle-imports',
         'toggle-3d', 'feature-panel', 'feature-name', 'feature-description',
         'feature-icon', 'feature-geometry', 'feature-audit', 'feature-type', 'building-fields',
         'building-type', 'building-number', 'building-height', 'road-fields', 'road-type',
-        'new-road-type', 'road-access', 'road-direction', 'lane-count', 'max-speed', 'road-surface',
+        'new-road-type', 'road-access', 'road-direction', 'lane-count', 'max-speed', 'max-speed-field', 'road-surface',
         'road-connectivity-hint',
         'business-fields', 'business-type', 'business-floor', 'business-phone',
         'business-hours', 'building-businesses', 'add-business',
         'feature-search', 'feature-search-options', 'hidden-objects',
-        'save-feature', 'close-feature', 'clear-all', 'my-location',
+        'save-feature', 'cancel-feature', 'close-feature', 'clear-all', 'my-location',
         'open-import', 'import-popup', 'import-close', 'import-area', 'import-list',
-        'find-route', 'clear-route', 'route-status', 'rebuild-road-network',
+        'find-route', 'clear-route', 'route-status', 'road-network-state', 'rebuild-road-network',
         'route-profile-foot', 'route-profile-bicycle', 'route-profile-car',
       ].map((id) => [id, document.getElementById(id)]),
     );
@@ -156,7 +167,11 @@ class MapEditor {
     });
     // Admin-only bulk load; refreshes the map when a load finishes.
     this.bulkLoad = new BulkLoadUI({
-      onComplete: () => { this.refreshEditorTiles(); this.refreshEditorData(); },
+      onComplete: () => {
+        this.refreshEditorTiles();
+        this.refreshEditorData();
+        this.markRoadNetworkStale();
+      },
     });
     // Right-click operations menu for the selected feature (Circularise,
     // Square, Flip, Copy, Delete).
@@ -179,7 +194,12 @@ class MapEditor {
     });
     this.roadNetwork = new RoadNetworkUI({
       button: this.elements['rebuild-road-network'],
+      stateElement: this.elements['road-network-state'],
       onStatus: (message, isError) => this.setStatus(message, isError),
+      onRebuilt: async () => {
+        await this.refreshEditorData();
+        await this.route.refreshAfterRebuild();
+      },
     });
     this.bindControls();
     this.auth.init();
@@ -191,7 +211,7 @@ class MapEditor {
     // admin-only on the server; hide their buttons for non-admins.
     this.elements['clear-all'].hidden = !user.is_admin;
     this.bulkLoad.setAdmin(user.is_admin);
-    this.roadNetwork.setAdmin(user.is_admin);
+    this.roadNetwork.setUser(user);
     // A feature may already be open (session refreshed) — repaint its audit line.
     if (this.selected) this.showFeaturePanel();
   }
@@ -199,6 +219,7 @@ class MapEditor {
   onLoggedOut() {
     this.currentUser = null;
     this.route.clear();
+    this.roadNetwork.setUser(null);
     // Drop out of editing so no tools linger once the session ends.
     if (this.editingEnabled) this.toggleEditing();
   }
@@ -251,7 +272,7 @@ class MapEditor {
     });
     // Terra Draw's own store only holds the feature being edited, so snapping
     // targets the saved editor features instead.
-    const snapping = { toCustom: (event) => this.snapToEditorTarget(event) };
+    const snapping = { toCustom: (event, context) => this.snapToEditorTarget(event, context) };
     const editableCoordinates = { draggable: true, midpoints: true, deletable: true, snappable: snapping };
     this.draw = new TerraDraw({
       adapter,
@@ -270,7 +291,7 @@ class MapEditor {
         }),
       ],
     });
-    this.draw.on('finish', (id) => this.persistFinishedDraw(id));
+    this.draw.on('finish', (id, context) => this.persistFinishedDraw(id, context));
     this.draw.start();
     this.draw.setMode('select');
   }
@@ -315,7 +336,8 @@ class MapEditor {
         }
       }
 
-      this.clearSelection();
+      if (this.selected) this.cancelSelectedEditing({ announce: false });
+      else this.clearSelection();
     });
     this.map.on('mousemove', (event) => this.previewSnapWhileDrawing(event));
     // Only opens the ops menu when the right-click lands on the already-
@@ -366,17 +388,15 @@ class MapEditor {
       if (query.length < 2) return;
       this.searchTimer = setTimeout(() => this.populateSearchOptions(query), 250);
     });
-    document.addEventListener('keydown', (event) => {
-      if (this.route.handleKeydown(event)) return;
-      if (!(event.key === 'z' && (event.ctrlKey || event.metaKey))) return;
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
-      event.preventDefault();
-      this.undoLast();
-    });
+    document.addEventListener('keydown', (event) => this.handleEditorKeydown(event), true);
     this.elements['save-feature'].addEventListener('click', () => this.saveProperties());
-    this.elements['close-feature'].addEventListener('click', () => this.clearSelection());
+    this.elements['cancel-feature'].addEventListener('click', () => this.cancelSelectedEditing());
+    this.elements['close-feature'].addEventListener('click', () => this.cancelSelectedEditing());
     this.elements['feature-type'].addEventListener('change', () => this.updatePropertyFieldVisibility());
     this.elements['new-road-type'].addEventListener('change', () => this.updateRoadDrawAvailability());
+    this.elements['road-type'].addEventListener('change', (event) => {
+      updateRoadSpeedControl(this.elements, event.target.value, { applyDefault: true });
+    });
     this.elements['add-business'].addEventListener('click', () => this.addBusinessToBuilding());
     this.elements['business-type'].addEventListener('change', () => {
       const icon = BUSINESS_ICONS[this.elements['business-type'].value];
@@ -403,6 +423,28 @@ class MapEditor {
     });
   }
 
+  handleEditorKeydown(event) {
+    if (this.route.handleKeydown(event)) return;
+    if (event.key === 'Escape') {
+      if (this.draw.getMode() !== 'select') {
+        event.preventDefault();
+        event.stopPropagation();
+        this.cancelActiveDrawing();
+        return;
+      }
+      if (this.selected) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.cancelSelectedEditing();
+      }
+      return;
+    }
+    if (!(event.key === 'z' && (event.ctrlKey || event.metaKey))) return;
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+    event.preventDefault();
+    this.undoLast();
+  }
+
   toggleEditing() {
     this.editingEnabled = !this.editingEnabled;
     const toggleEditing = this.elements['toggle-editing'];
@@ -416,6 +458,7 @@ class MapEditor {
     if (!this.editingEnabled) {
       this.draw.clear();
       this.draw.setMode('select');
+      this.clearSelection();
       this.updateSnapIndicator(undefined);
     }
     this.setStatus(this.editingEnabled ? t('editingEnabled') : t('editingDisabled'));
@@ -426,11 +469,45 @@ class MapEditor {
     this.elements['draw-line'].disabled = !this.editingEnabled || !this.elements['new-road-type'].value;
   }
 
+  setInteractionState(state) {
+    document.body.classList.toggle('road-drawing', state === 'drawing');
+    document.body.classList.toggle('road-editing', state === 'editing');
+    const indicator = this.elements['edit-state'];
+    indicator.hidden = !state;
+    indicator.textContent = state ? t(state === 'drawing' ? 'roadDrawingState' : 'roadEditingState') : '';
+  }
+
+  cancelActiveDrawing() {
+    this.draw.clear();
+    this.draw.setMode('select');
+    this.pendingDrawFeatureType = null;
+    this.pendingRoadType = null;
+    this.updateSnapIndicator(undefined);
+    this.setInteractionState(null);
+    Object.values(DRAW_MODE_BUTTONS).forEach((id) => this.elements[id].classList.remove('active'));
+    this.elements.select.classList.add('active');
+    this.setStatus(t('drawingCancelled'));
+  }
+
+  cancelSelectedEditing({ announce = true } = {}) {
+    if (!this.selected) return;
+    const wasRoad = this.selected.properties?.feature_type === 'road';
+    const changed = wasRoad && this.roadEditSession.isDirty(this.selected.serverId);
+    this.draw.clear();
+    this.roadEditSession.cancel();
+    this.clearSelection();
+    if (announce) this.setStatus(t(changed ? 'roadEditCancelled' : 'editingCancelled'));
+  }
+
   // Base roads are thin and their tile geometry is fragmented, so editing mode
   // imports the viewport's roads from OSM: full geometries, upserted by OSM id,
   // rendered as easily tappable editor features.
   async prepareViewportRoads(announce = false) {
     if (!this.editingEnabled || this.preparingRoads) return;
+    // Full-base installations already have authoritative full geometries in
+    // PostGIS. Re-fetching the viewport from Overpass is redundant and used to
+    // overwrite locally edited OSM attributes when edit mode was enabled.
+    if (this.fullBase) return;
     if (this.map.getZoom() < 15) {
       if (announce) this.setStatus(t('editingZoomHint'));
       return;
@@ -452,6 +529,7 @@ class MapEditor {
       this.setImportedLayerVisibility(true);
       this.refreshEditorTiles();
       await this.refreshEditorData();
+      if (result.roads_loaded > 0) this.markRoadNetworkStale();
       this.setStatus(t('roadsPrepared', { count: result.roads_loaded }));
     } catch (error) {
       console.error('Unable to prepare viewport roads', error);
@@ -481,10 +559,15 @@ class MapEditor {
       this.pendingDrawFeatureType = 'road';
       this.pendingRoadType = roadType;
       this.setSelectValue('road-type', roadType);
+      updateRoadSpeedControl(this.elements, roadType, { applyDefault: true });
       this.setStatus(t('roadDrawingActive'));
+      this.setInteractionState('drawing');
     } else if (mode !== 'select') {
       this.pendingDrawFeatureType = null;
       this.pendingRoadType = null;
+      this.setInteractionState(null);
+    } else {
+      this.setInteractionState(this.selected?.properties?.feature_type === 'road' ? 'editing' : null);
     }
     this.draw.setMode(mode);
     this.updateSnapIndicator(undefined);
@@ -511,7 +594,38 @@ class MapEditor {
     // payload from the authoritative stored properties, or saving would reset
     // source_kind, the OSM identity, and the base_* masking linkage.
     const storedProperties = editingSelected ? this.selected.properties : (feature.properties || {});
-    const payload = this.makeFeaturePayload(feature.geometry, storedProperties);
+    const isRoad = (editingSelected && storedProperties.feature_type === 'road')
+      || (!serverId && this.pendingDrawFeatureType === 'road');
+    let geometry = feature.geometry;
+    if (isRoad) {
+      geometry = snapRoadEndpoints(
+        geometry,
+        this.roadSegmentIndex,
+        editingSelected ? serverId : null,
+      );
+      const validation = validateRoadLineString(geometry);
+      if (!validation.valid) {
+        const fallback = editingSelected && this.roadEditSession.geometry(serverId);
+        if (fallback) this.draw.updateFeatureGeometry(drawId, fallback);
+        else if (this.draw.hasFeature(drawId)) this.draw.removeFeatures([drawId]);
+        this.setStatus(t(validation.reason), true);
+        return;
+      }
+      if (editingSelected) {
+        if (JSON.stringify(geometry) !== JSON.stringify(feature.geometry)) {
+          this.draw.updateFeatureGeometry(drawId, geometry);
+        }
+        this.roadEditSession.stage(geometry);
+        this.updateRoadConnectivity(this.visibleFeatures);
+        this.setInteractionState('editing');
+        this.setStatus(t('roadGeometryDraft'));
+        return;
+      }
+      // A browser double-click can deliver more than one completion callback;
+      // one draw id is allowed to create exactly one server row.
+      if (!this.roadEditSession.claimNewDraw(drawId)) return;
+    }
+    const payload = this.makeFeaturePayload(geometry, storedProperties);
     const previous = editingSelected
       ? { geometry: this.selected.geometry, properties: { ...this.selected.properties } }
       : null;
@@ -520,9 +634,15 @@ class MapEditor {
         ? await featuresApi.update(serverId, payload)
         : await featuresApi.create(payload);
       if (!serverId) {
-        this.pushUndo(() => featuresApi.remove(saved.id));
+        this.pushUndo(
+          () => featuresApi.remove(saved.id, { confirmPublished: true }),
+          { roadMutation: saved.feature_type === 'road' },
+        );
       } else if (previous) {
-        this.pushUndo(() => featuresApi.update(serverId, this.rawFeaturePayload(previous.geometry, previous.properties)));
+        this.pushUndo(
+          () => featuresApi.update(serverId, this.rawFeaturePayload(previous.geometry, previous.properties)),
+          { roadMutation: saved.feature_type === 'road' || previous.properties.feature_type === 'road' },
+        );
       }
       this.draw.removeFeatures([drawId]);
       this.adoptSavedFeature(saved);
@@ -530,13 +650,15 @@ class MapEditor {
       await this.refreshEditorData();
       this.showFeaturePanel();
       this.beginGeometryEditing(String(saved.id), saved.geometry);
-      const isRoad = saved.feature_type === 'road';
-      this.setStatus(isRoad
+      const savedIsRoad = saved.feature_type === 'road';
+      if (savedIsRoad) this.markRoadNetworkStale();
+      this.setStatus(savedIsRoad
         ? t('roadCreated', { connected: this.selectedRoadConnectedEnds(), total: 2 })
         : t('featureCreated'));
       this.pendingDrawFeatureType = null;
       this.pendingRoadType = null;
     } catch (error) {
+      if (isRoad && !serverId) this.roadEditSession.releaseNewDraw(drawId);
       if (serverId && isMissing(error)) {
         await this.handleMissingFeature(t('featureMissingSave'));
         return;
@@ -609,6 +731,13 @@ class MapEditor {
     }
     this.draw.selectFeature(drawId);
     this.draw.setMode('select');
+    if (this.selected?.properties?.feature_type === 'road') {
+      this.roadEditSession.begin(serverId, normalized);
+      this.setInteractionState('editing');
+    } else {
+      this.roadEditSession.clear();
+      this.setInteractionState(null);
+    }
     this.updateSnapIndicator(undefined);
   }
 
@@ -657,7 +786,10 @@ class MapEditor {
       };
 
       const saved = await featuresApi.create(payload);
-      this.pushUndo(() => featuresApi.remove(saved.id));
+      this.pushUndo(
+        () => featuresApi.remove(saved.id, { confirmPublished: true }),
+        { roadMutation: featureType === 'road' },
+      );
       this.adoptSavedFeature(saved);
       this.showFeaturePanel();
       this.beginGeometryEditing(String(saved.id), saved.geometry);
@@ -741,7 +873,8 @@ class MapEditor {
     this.elements['road-access'].value = properties.routing_access || '';
     this.elements['road-direction'].value = properties.direction || '';
     this.setSelectValue('lane-count', properties.lane_count);
-    this.setSelectValue('max-speed', properties.max_speed);
+    this.elements['max-speed'].value = properties.max_speed ?? '';
+    updateRoadSpeedControl(this.elements, properties.road_type, { applyDefault: false });
     this.setSelectValue('road-surface', properties.surface);
     this.elements['business-type'].value = properties.business_type || '';
     this.elements['business-floor'].value = properties.floor || '';
@@ -760,6 +893,9 @@ class MapEditor {
     this.elements['building-fields'].hidden = featureType !== 'building';
     this.elements['road-fields'].hidden = featureType !== 'road';
     this.elements['business-fields'].hidden = featureType !== 'business';
+    if (featureType === 'road') {
+      updateRoadSpeedControl(this.elements, this.elements['road-type'].value, { applyDefault: false });
+    }
   }
 
   // A new drawing reads the form for its initial payload, so leftover values
@@ -772,6 +908,7 @@ class MapEditor {
 
   clearSelection() {
     this.selected = null;
+    this.roadEditSession.clear();
     this.pendingDrawFeatureType = null;
     this.pendingRoadType = null;
     this.resetFeatureForm();
@@ -779,6 +916,12 @@ class MapEditor {
     this.elements['delete-feature'].disabled = true;
     this.elements['duplicate-feature'].disabled = true;
     this.updateSnapIndicator(undefined);
+    this.setInteractionState(null);
+  }
+
+  currentSelectedGeometry() {
+    if (!this.selected) return null;
+    return this.roadEditSession.geometry(this.selected.serverId) || this.selected.geometry;
   }
 
   makeFeaturePayload(geometry, previousProperties = {}) {
@@ -800,7 +943,12 @@ class MapEditor {
       : null;
     const direction = featureType === 'road' ? (this.elements['road-direction'].value || null) : null;
     const laneCount = featureType === 'road' ? this.integerFieldValue('lane-count') : null;
-    const maxSpeed = featureType === 'road' ? this.integerFieldValue('max-speed') : null;
+    const vehicleRoad = isVehicleRoadType(roadType);
+    const maxSpeed = featureType === 'road' && vehicleRoad
+      ? this.integerFieldValue('max-speed')
+      : (featureType === 'road' && previousProperties.road_type === roadType
+        ? (previousProperties.max_speed ?? null)
+        : null);
     const surface = featureType === 'road' ? (this.elements['road-surface'].value || null) : null;
     const businessType = featureType === 'business' ? (this.elements['business-type'].value || null) : null;
     const sourceKind = previousProperties.source_kind || 'manual';
@@ -885,24 +1033,36 @@ class MapEditor {
     };
   }
 
-  pushUndo(revert) {
-    this.undoStack.push(revert);
+  pushUndo(revert, { roadMutation = false } = {}) {
+    this.undoStack.push({ revert, roadMutation });
     if (this.undoStack.length > 50) this.undoStack.shift();
   }
 
   async undoLast() {
     if (!this.editingEnabled) return;
-    const revert = this.undoStack.pop();
-    if (!revert) {
+    if (this.selected?.properties?.feature_type === 'road') {
+      const geometry = this.roadEditSession.undoDraft(this.selected.serverId);
+      if (geometry) {
+        const drawFeature = this.draw.getSnapshot().find((feature) =>
+          String(feature.properties?.serverId) === this.selected.serverId);
+        if (drawFeature) this.draw.updateFeatureGeometry(drawFeature.id, geometry);
+        this.updateRoadConnectivity(this.visibleFeatures);
+        this.setStatus(t('roadDraftUndo'));
+        return;
+      }
+    }
+    const entry = this.undoStack.pop();
+    if (!entry) {
       this.setStatus(t('nothingToUndo'));
       return;
     }
     try {
-      await revert();
+      await entry.revert();
       this.draw.clear();
       this.clearSelection();
       this.refreshEditorTiles();
       await this.refreshEditorData();
+      if (entry.roadMutation) this.markRoadNetworkStale();
       this.setStatus(t('undoDone'));
     } catch (error) {
       console.error('Unable to undo', error);
@@ -918,17 +1078,22 @@ class MapEditor {
       base_source, base_source_layer, base_feature_id, osm_id, osm_type, ...properties
     } = this.selected.properties || {};
     const payload = this.rawFeaturePayload(
-      offsetGeometry(this.selected.geometry),
+      offsetGeometry(this.currentSelectedGeometry()),
       { ...properties, source_kind: 'manual' },
     );
     try {
       const saved = await featuresApi.create(payload);
-      this.pushUndo(() => featuresApi.remove(saved.id));
+      const isRoad = saved.feature_type === 'road';
+      this.pushUndo(
+        () => featuresApi.remove(saved.id, { confirmPublished: true }),
+        { roadMutation: isRoad },
+      );
       this.adoptSavedFeature(saved);
       this.showFeaturePanel();
       this.beginGeometryEditing(String(saved.id), saved.geometry);
       this.refreshEditorTiles();
       await this.refreshEditorData();
+      if (isRoad) this.markRoadNetworkStale();
       this.setStatus(t('duplicated'));
     } catch (error) {
       console.error('Unable to duplicate feature', error);
@@ -968,14 +1133,33 @@ class MapEditor {
     if (!this.editingEnabled || !this.selected) return;
     const serverId = this.selected.serverId;
     const previous = { geometry: this.selected.geometry, properties: { ...this.selected.properties } };
-    const geometry = transform(previous.geometry);
+    let geometry = transform(this.currentSelectedGeometry());
     if (!geometry) {
       this.setStatus(t('geometryOpFailed'), true);
       return;
     }
+    const isRoad = previous.properties.feature_type === 'road';
+    if (isRoad) {
+      geometry = snapRoadEndpoints(geometry, this.roadSegmentIndex, serverId);
+      const validation = validateRoadLineString(geometry);
+      if (!validation.valid) {
+        this.setStatus(t(validation.reason), true);
+        return;
+      }
+      this.roadEditSession.stage(geometry);
+      const drawFeature = this.draw.getSnapshot().find((feature) =>
+        String(feature.properties?.serverId) === serverId);
+      if (drawFeature) this.draw.updateFeatureGeometry(drawFeature.id, geometry);
+      this.updateRoadConnectivity(this.visibleFeatures);
+      this.setStatus(t('roadGeometryDraft'));
+      return;
+    }
     try {
       const saved = await featuresApi.update(serverId, this.rawFeaturePayload(geometry, previous.properties));
-      this.pushUndo(() => featuresApi.update(serverId, this.rawFeaturePayload(previous.geometry, previous.properties)));
+      this.pushUndo(
+        () => featuresApi.update(serverId, this.rawFeaturePayload(previous.geometry, previous.properties)),
+        { roadMutation: isRoad },
+      );
       this.adoptSavedFeature(saved);
       this.refreshEditorTiles();
       await this.refreshEditorData();
@@ -1088,13 +1272,33 @@ class MapEditor {
     if (!this.selected) return;
     const serverId = this.selected.serverId;
     const previous = { geometry: this.selected.geometry, properties: { ...this.selected.properties } };
+    const geometry = this.currentSelectedGeometry();
+    const isRoad = this.selected.properties?.feature_type === 'road'
+      || this.elements['feature-type'].value === 'road';
+    if (isRoad) {
+      const validation = validateRoadLineString(geometry);
+      if (!validation.valid) {
+        this.setStatus(t(validation.reason), true);
+        return;
+      }
+    }
     try {
-      const saved = await featuresApi.update(serverId, this.makeFeaturePayload(this.selected.geometry, this.selected.properties));
-      this.pushUndo(() => featuresApi.update(serverId, this.rawFeaturePayload(previous.geometry, previous.properties)));
+      const saved = await featuresApi.update(serverId, this.makeFeaturePayload(geometry, this.selected.properties));
+      this.pushUndo(
+        () => featuresApi.update(serverId, this.rawFeaturePayload(previous.geometry, previous.properties)),
+        { roadMutation: isRoad },
+      );
       this.adoptSavedFeature(saved);
       this.refreshEditorTiles();
       await this.refreshEditorData();
-      this.setStatus(t('propertiesSaved'));
+      this.showFeaturePanel();
+      this.beginGeometryEditing(serverId, saved.geometry);
+      if (isRoad) {
+        this.markRoadNetworkStale();
+        this.setStatus(t('roadUpdated', { connected: this.selectedRoadConnectedEnds(), total: 2 }));
+      } else {
+        this.setStatus(t('propertiesSaved'));
+      }
     } catch (error) {
       if (isMissing(error)) {
         await this.handleMissingFeature(t('featureMissingSave'));
@@ -1114,23 +1318,48 @@ class MapEditor {
       || (properties.source_kind === 'osm_import' && Boolean(properties.osm_id));
     const serverId = this.selected.serverId;
     const snapshot = { geometry: this.selected.geometry, properties: { ...this.selected.properties } };
+    const isRoad = properties.feature_type === 'road';
     const deleteButton = this.elements['delete-feature'];
     deleteButton.disabled = true;
     try {
-      if (isBaseCopy) {
-        // The copy becomes a tombstone instead of a deleted row, so the
-        // read-only basemap original stays masked.
-        await featuresApi.update(serverId, { source_kind: 'base_tombstone' });
-      } else {
-        await featuresApi.remove(serverId);
+      let confirmPublished = false;
+      while (true) {
+        try {
+          if (isBaseCopy) {
+            // The copy becomes a tombstone instead of a deleted row, so the
+            // read-only basemap original stays masked.
+            await featuresApi.update(
+              serverId,
+              { source_kind: 'base_tombstone' },
+              { confirmPublished },
+            );
+          } else {
+            await featuresApi.remove(serverId, { confirmPublished });
+          }
+          break;
+        } catch (error) {
+          const needsConfirmation = error instanceof ApiError
+            && error.status === 409
+            && error.message === 'published_road_confirmation_required';
+          if (!needsConfirmation) throw error;
+          if (!window.confirm(t('publishedRoadDeleteConfirm'))) {
+            this.setStatus(t('deleteCancelled'));
+            return;
+          }
+          confirmPublished = true;
+        }
       }
-      this.pushUndo(isBaseCopy
-        ? () => featuresApi.update(serverId, { source_kind: snapshot.properties.source_kind || 'manual' })
-        : () => featuresApi.create(this.rawFeaturePayload(snapshot.geometry, snapshot.properties)));
+      this.pushUndo(
+        isBaseCopy
+          ? () => featuresApi.update(serverId, { source_kind: snapshot.properties.source_kind || 'manual' })
+          : () => featuresApi.create(this.rawFeaturePayload(snapshot.geometry, snapshot.properties)),
+        { roadMutation: isRoad },
+      );
       this.draw.clear();
       this.clearSelection();
       this.refreshEditorTiles();
       await this.refreshEditorData();
+      if (isRoad) this.markRoadNetworkStale();
       this.setStatus(isBaseCopy ? t('baseObjectRemoved') : t('featureDeleted'));
     } catch (error) {
       if (isMissing(error)) {
@@ -1149,11 +1378,17 @@ class MapEditor {
     this.map.getSource('editor')?.setTiles([`/tiles/editor/{z}/{x}/{y}?revision=${this.editorRevision}`]);
   }
 
+  markRoadNetworkStale() {
+    this.roadNetwork.markStale();
+    this.route.invalidateNetwork();
+  }
+
   async refreshEditorData() {
     if (this.fullBase) return this.refreshViewportData();
     try {
       const collection = await featuresApi.list();
       const visible = collection.features.filter((feature) => feature.properties?.source_kind !== 'base_tombstone');
+      this.visibleFeatures = visible;
       this.elements['feature-count'].textContent = visible.length;
       applyBaseFeatureMasks(this.map, this.baseFilters, collection.features);
       this.map.getSource('editor_anchors')?.setData(featureAnchors(collection.features));
@@ -1176,6 +1411,7 @@ class MapEditor {
     }
     if (this.map.getZoom() < EDIT_ZOOM) {
       this.snapVertices = [];
+      this.visibleFeatures = [];
       this.updateRoadConnectivity([]);
       return;
     }
@@ -1184,11 +1420,13 @@ class MapEditor {
       const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(',');
       const collection = await featuresApi.listInBounds(bbox, VIEWPORT_FEATURE_LIMIT);
       const visible = collection.features.filter((feature) => feature.properties?.source_kind !== 'base_tombstone');
+      this.visibleFeatures = visible;
       this.snapVertices = collectVertices(visible);
       this.updateRoadConnectivity(visible);
     } catch (error) {
       console.error('Unable to load viewport features', error);
       this.snapVertices = [];
+      this.visibleFeatures = [];
       this.updateRoadConnectivity([]);
     }
   }
@@ -1196,14 +1434,18 @@ class MapEditor {
   // Green/red endpoint markers use the same segment index as drawing snaps and
   // therefore preview the manual junctions the next graph rebuild will create.
   updateRoadConnectivity(features) {
-    const roads = features.filter((feature) => feature.properties?.feature_type === 'road');
-    if (this.selected?.properties?.feature_type === 'road'
-      && !roads.some((feature) => String(feature.id) === this.selected.serverId)) {
-      roads.push({
+    const roads = features
+      .filter((feature) => feature.properties?.feature_type === 'road')
+      .map((feature) => ({ ...feature }));
+    if (this.selected?.properties?.feature_type === 'road') {
+      const selectedRoad = {
         id: this.selected.serverId,
-        geometry: this.selected.geometry,
+        geometry: this.currentSelectedGeometry(),
         properties: this.selected.properties,
-      });
+      };
+      const existingIndex = roads.findIndex((feature) => String(feature.id) === this.selected.serverId);
+      if (existingIndex === -1) roads.push(selectedRoad);
+      else roads[existingIndex] = selectedRoad;
     }
     this.roadSegmentIndex = RoadSegmentIndex.fromFeatures(roads);
     this.roadConnectivityMarkers = roadConnectivity(roads, this.roadSegmentIndex);
@@ -1258,13 +1500,17 @@ class MapEditor {
   async restoreHiddenObject(feature) {
     try {
       try {
-        await featuresApi.remove(feature.id);
+        await featuresApi.remove(feature.id, { confirmPublished: true });
       } catch (error) {
         if (!isMissing(error)) throw error;
       }
-      this.pushUndo(() => featuresApi.create(this.rawFeaturePayload(feature.geometry, feature.properties)));
+      this.pushUndo(
+        () => featuresApi.create(this.rawFeaturePayload(feature.geometry, feature.properties)),
+        { roadMutation: feature.properties?.feature_type === 'road' },
+      );
       this.refreshEditorTiles();
       await this.refreshEditorData();
+      if (feature.properties?.feature_type === 'road') this.markRoadNetworkStale();
       this.setStatus(t('baseObjectRestored'));
     } catch (error) {
       console.error('Unable to restore basemap object', error);
@@ -1307,8 +1553,8 @@ class MapEditor {
     }
   }
 
-  snapToEditorTarget(event) {
-    const best = this.nearestSnapCoordinate(event.lng, event.lat);
+  snapToEditorTarget(event, context) {
+    const best = this.nearestSnapCoordinate(event.lng, event.lat, context);
     this.updateSnapIndicator(best);
     return best;
   }
@@ -1330,17 +1576,19 @@ class MapEditor {
     return best;
   }
 
-  nearestSnapCoordinate(lng, lat) {
+  nearestSnapCoordinate(lng, lat, context) {
     const roadEditing = this.draw.getMode() === 'linestring'
       || this.selected?.properties?.feature_type === 'road';
     if (!roadEditing) return this.nearestSnapVertex(lng, lat);
-    // Keep the hover target near the pointer on screen, but never auto-connect
-    // a road across more than eight metres. Unlike vertex-only snapping, this
-    // projects onto the nearest point anywhere along a saved road segment.
-    const pixelThreshold = (360 / (2 ** this.map.getZoom() * 512)) * 14;
-    const threshold = Math.min(pixelThreshold, 8 / 111_320);
-    const excludedOwner = this.draw.getMode() === 'select' ? this.selected?.serverId : null;
-    return this.roadSegmentIndex.nearestCoordinate(lng, lat, threshold, excludedOwner);
+    const editingExistingRoad = this.draw.getMode() === 'select'
+      && this.selected?.properties?.feature_type === 'road';
+    if (!canSnapRoadCoordinate(context, editingExistingRoad)) return undefined;
+    // Project onto the nearest point anywhere along another saved road. Eight
+    // metres is the shared UI/builder maximum and self-snaps are excluded.
+    const excludedOwner = editingExistingRoad ? this.selected?.serverId : null;
+    return this.roadSegmentIndex.nearestCoordinate(
+      lng, lat, ROAD_SNAP_DEGREES, excludedOwner,
+    );
   }
 
   // Terra Draw's own toCustom snapping drives the ring while it fires, but it
@@ -1399,6 +1647,7 @@ class MapEditor {
       this.setImportedLayerVisibility(true);
       this.refreshEditorTiles();
       await this.refreshEditorData();
+      if (kind === 'roads' && result.roads_loaded > 0) this.markRoadNetworkStale();
       this.setStatus(result.message);
     } catch (error) {
       console.error(`Unable to import ${kind}`, error);
@@ -1411,12 +1660,14 @@ class MapEditor {
 
   async clearAll() {
     if (!window.confirm(t('clearAllConfirm'))) return;
+    const hadRoads = this.roadSegmentIndex.cells.size > 0 || this.roadSegmentIndex.longSegments.length > 0;
     try {
       await featuresApi.clearAll();
       this.draw.clear();
       this.clearSelection();
       this.refreshEditorTiles();
       await this.refreshEditorData();
+      if (hadRoads) this.markRoadNetworkStale();
       this.setStatus(t('cleared'));
     } catch (error) {
       console.error('Unable to clear editor data', error);

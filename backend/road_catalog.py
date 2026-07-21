@@ -15,6 +15,17 @@ ROAD_TYPES = frozenset({
     "footway", "path", "steps",
 })
 
+VEHICLE_ROAD_TYPES = ROAD_TYPES - {
+    "pedestrian", "cycleway", "footway", "path", "steps",
+}
+
+ROAD_DIRECTIONS = frozenset({"bidirectional", "oneway", "oneway_reverse"})
+
+ROAD_SURFACES = frozenset({
+    "asphalt", "concrete", "paving_stones", "cobblestone", "compacted",
+    "gravel", "fine_gravel", "dirt", "ground", "unpaved",
+})
+
 ROUTING_ACCESS_VALUES = frozenset({"yes", "destination", "private", "no"})
 
 
@@ -27,7 +38,14 @@ def validate_road_values(
     road_type: Optional[str],
     properties: Optional[Mapping[str, Any]],
     *,
+    direction: Optional[str] = None,
+    lane_count: Optional[int] = None,
+    max_speed: Optional[int] = None,
+    surface: Optional[str] = None,
     previous_road_type: Optional[str] = None,
+    previous_direction: Optional[str] = None,
+    previous_max_speed: Optional[int] = None,
+    previous_surface: Optional[str] = None,
 ) -> None:
     """Validate a road edit without depending on FastAPI or the database.
 
@@ -44,3 +62,18 @@ def validate_road_values(
     routing_access = (properties or {}).get("routing_access")
     if routing_access not in (None, "") and routing_access not in ROUTING_ACCESS_VALUES:
         raise RoadValueError(f"Unsupported road access: {routing_access}")
+    if direction and direction != previous_direction and direction not in ROAD_DIRECTIONS:
+        raise RoadValueError(f"Unsupported road direction: {direction}")
+    if lane_count is not None and not 1 <= lane_count <= 8:
+        raise RoadValueError("Road lanes must be between 1 and 8")
+    if surface and surface != previous_surface and surface not in ROAD_SURFACES:
+        raise RoadValueError(f"Unsupported road surface: {surface}")
+    if max_speed is not None and not 1 <= max_speed <= 200:
+        raise RoadValueError("Road speed must be between 1 and 200 km/h")
+    if (
+        road_type in ROAD_TYPES
+        and road_type not in VEHICLE_ROAD_TYPES
+        and max_speed is not None
+        and max_speed != previous_max_speed
+    ):
+        raise RoadValueError("Speed is only available for vehicle road classes")

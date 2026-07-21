@@ -23,3 +23,26 @@ def test_road_access_is_constrained():
 
 def test_non_road_ignores_road_specific_values():
     validate_road_values("waterway", "secodnary", {"routing_access": "sometimes"})
+
+
+def test_controlled_road_values_are_validated():
+    validate_road_values(
+        "road", "primary", {"routing_access": "yes"},
+        direction="oneway", lane_count=2, max_speed=70, surface="asphalt",
+    )
+    with pytest.raises(RoadValueError):
+        validate_road_values("road", "primary", {}, direction="sideways")
+    with pytest.raises(RoadValueError):
+        validate_road_values("road", "primary", {}, lane_count=9)
+    with pytest.raises(RoadValueError):
+        validate_road_values("road", "primary", {}, surface="asphlat")
+
+
+def test_speed_is_only_newly_set_for_vehicle_road_classes():
+    with pytest.raises(RoadValueError):
+        validate_road_values("road", "footway", {}, max_speed=30)
+    # Existing imported data is preserved by geometry-only edits.
+    validate_road_values(
+        "road", "footway", {}, max_speed=30, previous_max_speed=30,
+        previous_road_type="footway",
+    )

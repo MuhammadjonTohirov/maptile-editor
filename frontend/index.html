@@ -15,6 +15,7 @@
       <p class="eyebrow" data-i18n="panelEyebrow">Self-hosted vector map</p>
       <h1 data-i18n="panelHeading">Map Editor</h1>
       <p id="status" class="status" data-i18n="statusLoading">Loading map…</p>
+      <p id="edit-state" class="edit-state" hidden></p>
       <div id="user-chip" class="user-chip" hidden>
         <span class="user-chip-name"><span data-i18n="authSignedInAs">Signed in as</span> <strong id="user-name"></strong></span>
         <span class="user-chip-actions">
@@ -24,91 +25,118 @@
       </div>
     </div>
 
-    <section>
-      <h2 data-i18n="sectionEditing">Editing</h2>
-      <div class="button-grid">
-        <button id="toggle-editing" class="primary" type="button" data-i18n="enableEditing">Enable editing</button>
-        <button id="draw-point" type="button" disabled data-i18n="drawPoint">Point</button>
-        <button id="draw-line" type="button" disabled data-i18n="drawRoad">Road</button>
-        <button id="draw-polygon" type="button" disabled data-i18n="drawPolygon">Polygon</button>
-        <button id="draw-rect" type="button" disabled data-i18n="drawRect">Rectangle</button>
-        <button id="draw-circle" type="button" disabled data-i18n="drawCircle">Circle</button>
-        <button id="select" type="button" disabled data-i18n="selectEdit">Select / edit</button>
-        <button id="undo-edit" type="button" disabled data-i18n="undo">Undo</button>
-        <button id="duplicate-feature" type="button" disabled data-i18n="duplicate">Duplicate</button>
-        <button id="delete-feature" class="danger" type="button" disabled data-i18n="deleteSelected">Delete selected</button>
-      </div>
-      <label class="road-draw-setup"><span data-i18n="newRoadClass">New road class</span>
-        <select id="new-road-type" disabled></select>
-      </label>
-      <p class="form-hint" data-i18n="roadDrawHint">Choose a class, draw the road, then double-click its last point to save it.</p>
-    </section>
+    <div class="controls-scroll">
+      <section class="control-section">
+        <details open>
+          <summary><h2 data-i18n="sectionEditing">Editing</h2></summary>
+          <div class="control-section-content">
+            <div class="button-grid">
+              <button id="toggle-editing" class="primary" type="button" data-i18n="enableEditing">Enable editing</button>
+              <button id="draw-point" type="button" disabled data-i18n="drawPoint">Point</button>
+              <button id="draw-line" type="button" disabled data-i18n="drawRoad">Road</button>
+              <button id="draw-polygon" type="button" disabled data-i18n="drawPolygon">Polygon</button>
+              <button id="draw-rect" type="button" disabled data-i18n="drawRect">Rectangle</button>
+              <button id="draw-circle" type="button" disabled data-i18n="drawCircle">Circle</button>
+              <button id="select" type="button" disabled data-i18n="selectEdit">Select / edit</button>
+              <button id="undo-edit" type="button" disabled data-i18n="undo">Undo</button>
+              <button id="duplicate-feature" type="button" disabled data-i18n="duplicate">Duplicate</button>
+              <button id="delete-feature" class="danger" type="button" disabled data-i18n="deleteSelected">Delete selected</button>
+            </div>
+            <label class="road-draw-setup"><span data-i18n="newRoadClass">New road class</span>
+              <select id="new-road-type" disabled></select>
+            </label>
+            <p class="form-hint" data-i18n="roadDrawHint">Choose a class, draw the road, then double-click its last point to save it.</p>
+          </div>
+        </details>
+      </section>
 
-    <section>
-      <h2 data-i18n="sectionFind">Find feature</h2>
-      <input id="feature-search" list="feature-search-options" type="text" placeholder="Search by name…" data-i18n-placeholder="searchPlaceholder" autocomplete="off">
-      <datalist id="feature-search-options"></datalist>
-    </section>
+      <section class="control-section">
+        <details open>
+          <summary><h2 data-i18n="sectionFind">Find feature</h2></summary>
+          <div class="control-section-content">
+            <input id="feature-search" list="feature-search-options" type="text" placeholder="Search by name…" data-i18n-placeholder="searchPlaceholder" autocomplete="off">
+            <datalist id="feature-search-options"></datalist>
+          </div>
+        </details>
+      </section>
 
-    <section>
-      <h2 data-i18n="sectionRoute">Find route</h2>
-      <div class="button-grid">
-        <button id="route-profile-foot" type="button" class="active" data-i18n="routeProfileFoot">Walking</button>
-        <button id="route-profile-bicycle" type="button" data-i18n="routeProfileBicycle">Bicycle</button>
-        <button id="route-profile-car" type="button" data-i18n="routeProfileCar">Car</button>
-      </div>
-      <div class="button-grid">
-        <button id="find-route" type="button" data-i18n="findRoute">Find route</button>
-        <button id="clear-route" type="button" disabled data-i18n="clearRoute">Clear route</button>
-      </div>
-      <p id="route-status" class="form-hint"></p>
-    </section>
+      <section class="control-section">
+        <details open>
+          <summary><h2 data-i18n="sectionRoute">Find route</h2></summary>
+          <div class="control-section-content">
+            <div class="button-grid">
+              <button id="route-profile-foot" type="button" class="active" data-i18n="routeProfileFoot">Walking</button>
+              <button id="route-profile-bicycle" type="button" data-i18n="routeProfileBicycle">Bicycle</button>
+              <button id="route-profile-car" type="button" data-i18n="routeProfileCar">Car</button>
+            </div>
+            <div class="button-grid">
+              <button id="find-route" type="button" data-i18n="findRoute">Find route</button>
+              <button id="clear-route" type="button" disabled data-i18n="clearRoute">Clear route</button>
+            </div>
+            <p id="route-status" class="form-hint"></p>
+            <p id="road-network-state" class="network-state" data-state="stale" data-i18n="roadNetworkStateMissing">Road network has not been built.</p>
+          </div>
+        </details>
+      </section>
 
-    <section>
-      <h2 data-i18n="sectionLayers">Layers</h2>
-      <label class="switch"><input id="toggle-imports" type="checkbox"><span data-i18n="importedOverlay">Imported OSM overlay</span></label>
-      <label class="switch"><input id="toggle-3d" type="checkbox"><span data-i18n="threeDBuildings">3D buildings</span></label>
-    </section>
+      <section class="control-section">
+        <details>
+          <summary><h2 data-i18n="sectionLayers">Layers</h2></summary>
+          <div class="control-section-content">
+            <label class="switch"><input id="toggle-imports" type="checkbox"><span data-i18n="importedOverlay">Imported OSM overlay</span></label>
+            <label class="switch"><input id="toggle-3d" type="checkbox"><span data-i18n="threeDBuildings">3D buildings</span></label>
+          </div>
+        </details>
+      </section>
 
-    <section>
-      <h2 data-i18n="sectionData">Data</h2>
-      <div class="button-grid">
-        <button id="open-import" type="button" data-i18n="importOpen">Import…</button>
-        <button id="my-location" type="button" data-i18n="myLocation">My location</button>
-        <button id="open-bulk-load" type="button" data-i18n="bulkLoadOpen" hidden>Bulk load…</button>
-        <button id="rebuild-road-network" type="button" data-i18n="rebuildRoadNetwork" hidden>Rebuild road network…</button>
-        <button id="clear-all" class="danger" type="button" data-i18n="clearEditorData">Clear editor data</button>
-      </div>
-      <div id="import-popup" class="import-popup" hidden>
-        <div class="panel-heading inline-heading">
-          <p id="import-area" class="form-hint"></p>
-          <button id="import-close" class="icon-button" type="button" aria-label="Close" data-i18n-aria-label="closeProperties">×</button>
-        </div>
-        <div id="import-list" class="import-list">
-          <button type="button" data-kind="buildings" data-i18n="importBuildings">Import buildings</button>
-          <button type="button" data-kind="roads" data-i18n="importRoads">Import roads</button>
-          <button type="button" data-kind="streetlights" data-i18n="importStreetlights">Import street lights</button>
-          <button type="button" data-kind="traffic-lights" data-i18n="importTrafficLights">Import traffic lights</button>
-          <button type="button" data-kind="businesses" data-i18n="importBusinesses">Import businesses</button>
-        </div>
-      </div>
-    </section>
+      <section class="control-section">
+        <details>
+          <summary><h2 data-i18n="sectionData">Data</h2></summary>
+          <div class="control-section-content">
+            <div class="button-grid">
+              <button id="open-import" type="button" data-i18n="importOpen">Import…</button>
+              <button id="my-location" type="button" data-i18n="myLocation">My location</button>
+              <button id="open-bulk-load" type="button" data-i18n="bulkLoadOpen" hidden>Bulk load…</button>
+              <button id="rebuild-road-network" type="button" data-i18n="rebuildRoadNetwork" hidden>Rebuild road network…</button>
+              <button id="clear-all" class="danger" type="button" data-i18n="clearEditorData">Clear editor data</button>
+            </div>
+            <div id="import-popup" class="import-popup" hidden>
+              <div class="panel-heading inline-heading">
+                <p id="import-area" class="form-hint"></p>
+                <button id="import-close" class="icon-button" type="button" aria-label="Close" data-i18n-aria-label="closeProperties">×</button>
+              </div>
+              <div id="import-list" class="import-list">
+                <button type="button" data-kind="buildings" data-i18n="importBuildings">Import buildings</button>
+                <button type="button" data-kind="roads" data-i18n="importRoads">Import roads</button>
+                <button type="button" data-kind="streetlights" data-i18n="importStreetlights">Import street lights</button>
+                <button type="button" data-kind="traffic-lights" data-i18n="importTrafficLights">Import traffic lights</button>
+                <button type="button" data-kind="businesses" data-i18n="importBusinesses">Import businesses</button>
+              </div>
+            </div>
+          </div>
+        </details>
+      </section>
 
-    <section>
-      <h2 data-i18n="sectionHidden">Hidden basemap objects</h2>
-      <ul id="hidden-objects" class="hidden-objects"><li class="empty" data-i18n="hiddenObjectsEmpty">None</li></ul>
-    </section>
+      <section class="control-section">
+        <details>
+          <summary><h2 data-i18n="sectionHidden">Hidden basemap objects</h2></summary>
+          <div class="control-section-content">
+            <ul id="hidden-objects" class="hidden-objects"><li class="empty" data-i18n="hiddenObjectsEmpty">None</li></ul>
+          </div>
+        </details>
+      </section>
 
-    <footer>
-      <span><span data-i18n="zoomLabel">Zoom</span> <strong id="zoom-level">0</strong></span>
-      <span><span data-i18n="featureCountLabel">Editor features</span> <strong id="feature-count">0</strong></span>
-      <a href="/client.html" target="_blank" rel="noopener" data-i18n="clientViewLink">Client view</a>
-      <span class="lang-switch" role="group" aria-label="Interface language" data-i18n-aria-label="languageAria">
-        <button type="button" data-locale="uz">UZ</button>
-        <button type="button" data-locale="ru">RU</button>
-        <button type="button" data-locale="en">EN</button>
-      </span>
-    </footer>
+      <footer>
+        <span><span data-i18n="zoomLabel">Zoom</span> <strong id="zoom-level">0</strong></span>
+        <span><span data-i18n="featureCountLabel">Editor features</span> <strong id="feature-count">0</strong></span>
+        <a href="/client.html" target="_blank" rel="noopener" data-i18n="clientViewLink">Client view</a>
+        <span class="lang-switch" role="group" aria-label="Interface language" data-i18n-aria-label="languageAria">
+          <button type="button" data-locale="uz">UZ</button>
+          <button type="button" data-locale="ru">RU</button>
+          <button type="button" data-locale="en">EN</button>
+        </span>
+      </footer>
+    </div>
   </aside>
 
   <aside id="feature-panel" class="panel feature-panel" hidden aria-label="Feature properties" data-i18n-aria-label="featurePanelAria">
@@ -189,13 +217,16 @@
       </label>
       <div class="field-pair">
         <label><span data-i18n="labelLanes">Lanes</span><select id="lane-count"></select></label>
-        <label><span data-i18n="labelMaxSpeed">Max speed (km/h)</span><select id="max-speed"></select></label>
+        <label id="max-speed-field"><span data-i18n="labelMaxSpeed">Max speed (km/h)</span><input id="max-speed" type="number" min="1" max="200" step="1" autocomplete="off"></label>
       </div>
       <label><span data-i18n="labelSurface">Surface</span><select id="road-surface"></select></label>
       <p id="road-connectivity-hint" class="form-hint"></p>
     </div>
-    <p class="form-hint" data-i18n="formHint">New shapes are saved immediately. Change details or geometry, then save again.</p>
-    <button id="save-feature" class="primary" type="button" data-i18n="saveProperties">Save properties</button>
+    <p class="form-hint" data-i18n="formHint">Road geometry stays as a draft until you save; Cancel or Escape restores the published feature.</p>
+    <div class="form-actions">
+      <button id="save-feature" class="primary" type="button" data-i18n="saveChanges">Save changes</button>
+      <button id="cancel-feature" type="button" data-i18n="cancelEdit">Cancel</button>
+    </div>
   </aside>
 
   <div id="feature-context-menu" class="feature-context-menu" hidden>

@@ -35,7 +35,7 @@ MANUAL_JUNCTION_SPLIT_TOLERANCE_DEGREES = 1e-9
 _STATE_FIELDS = {
     "status", "phase", "progress", "roads_total", "roads_processed",
     "segments_total", "segments_processed", "vertices_count", "edge_count",
-    "started_at", "finished_at", "error",
+    "started_at", "finished_at", "error", "build_source_revision",
 }
 _NOW = object()
 
@@ -87,7 +87,8 @@ async def status(db: AsyncSession) -> dict[str, Any]:
     row = (await db.execute(text(
         "SELECT status, phase, progress, roads_total, roads_processed, "
         "segments_total, segments_processed, vertices_count, edge_count, "
-        "published_at, started_at, finished_at, updated_at, error "
+        "published_at, started_at, finished_at, updated_at, error, "
+        "is_stale, source_revision, published_revision, build_source_revision, source_changed_at "
         "FROM road_network_build_state WHERE id = 1"
     ))).mappings().one()
     result = dict(row)
@@ -125,7 +126,7 @@ async def _prepare_manual_junctions(db: AsyncSession) -> None:
     ))
 
 
-async def _prepare() -> int:
+async def _prepare() -> tuple[int, int]:
     async with async_session() as db:
         version = (await db.execute(text(
             "SELECT extversion FROM pg_extension WHERE extname = 'pgrouting'"
@@ -136,6 +137,9 @@ async def _prepare() -> int:
         roads_total = (await db.execute(text(
             "SELECT count(*) FROM features "
             "WHERE feature_type = 'road' AND source_kind <> 'base_tombstone'"
+        ))).scalar_one()
+        source_revision = (await db.execute(text(
+            "SELECT source_revision FROM road_network_build_state WHERE id = 1"
         ))).scalar_one()
 
         for statement in (
@@ -161,6 +165,8 @@ async def _prepare() -> int:
                 road_type TEXT,
                 direction TEXT,
                 max_speed INTEGER,
+                lane_count INTEGER,
+                surface TEXT,
                 access TEXT,
                 service TEXT,
                 start_x DOUBLE PRECISION NOT NULL,
@@ -186,6 +192,8 @@ async def _prepare() -> int:
                 road_type TEXT,
                 direction TEXT,
                 max_speed INTEGER,
+                lane_count INTEGER,
+                surface TEXT,
                 access TEXT,
                 service TEXT,
                 source BIGINT NOT NULL,
@@ -197,12 +205,12 @@ async def _prepare() -> int:
             await db.execute(text(statement))
         await _prepare_manual_junctions(db)
         await db.commit()
-    return roads_total
+    return roads_total, source_revision
 
 
 _INSERT_SEGMENT_BATCH = text("""
 WITH road_batch AS MATERIALIZED (
-    SELECT id, road_type, direction, max_speed, source_kind,
+    SELECT id, road_type, direction, max_speed, lane_count, surface, source_kind,
            COALESCE(
                NULLIF(properties ->> 'routing_access', ''),
                NULLIF(properties -> 'osm_tags' ->> 'motor_vehicle', ''),
@@ -218,7 +226,7 @@ WITH road_batch AS MATERIALIZED (
     ORDER BY id
     LIMIT :batch_size
 ), snapped AS (
-    SELECT b.id, b.road_type, b.direction, b.max_speed, b.access, b.service,
+    SELECT b.id, b.road_type, b.direction, b.max_speed, b.lane_count, b.surface, b.access, b.service,
            CASE WHEN b.source_kind = 'manual' THEN
                ST_SetPoint(
                    ST_SetPoint(b.geometry, 0, COALESCE(start_junction.geom, ST_StartPoint(b.geometry))),
@@ -237,7 +245,7 @@ WITH road_batch AS MATERIALIZED (
     WHERE target_feature_id IN (SELECT id FROM road_batch)
     GROUP BY target_feature_id
 ), noded AS (
-    SELECT b.id, b.road_type, b.direction, b.max_speed, b.access, b.service,
+    SELECT b.id, b.road_type, b.direction, b.max_speed, b.lane_count, b.surface, b.access, b.service,
            ST_Force2D(d.geom)::geometry(LineString, 4326) AS geom
     FROM snapped b
     LEFT JOIN blades ON blades.target_feature_id = b.id
@@ -253,12 +261,12 @@ WITH road_batch AS MATERIALIZED (
         END
     ) AS d
 ), dumped AS (
-    SELECT b.id AS feature_id, b.road_type, b.direction, b.max_speed, b.access, b.service,
+    SELECT b.id AS feature_id, b.road_type, b.direction, b.max_speed, b.lane_count, b.surface, b.access, b.service,
            ST_Force2D(d.geom)::geometry(LineString, 4326) AS geom
     FROM noded b
     CROSS JOIN LATERAL ST_DumpSegments(b.geom) AS d
 ), prepared AS (
-    SELECT feature_id, road_type, direction, max_speed, access, service, geom,
+    SELECT feature_id, road_type, direction, max_speed, lane_count, surface, access, service, geom,
            ST_X(ST_StartPoint(geom)) AS start_x,
            ST_Y(ST_StartPoint(geom)) AS start_y,
            ST_X(ST_EndPoint(geom)) AS end_x,
@@ -266,9 +274,9 @@ WITH road_batch AS MATERIALIZED (
     FROM dumped
 ), inserted AS (
     INSERT INTO road_network_segments_build
-        (feature_id, road_type, direction, max_speed, access, service,
+        (feature_id, road_type, direction, max_speed, lane_count, surface, access, service,
          start_x, start_y, end_x, end_y, geom)
-    SELECT feature_id, road_type, direction, max_speed, access, service,
+    SELECT feature_id, road_type, direction, max_speed, lane_count, surface, access, service,
            start_x, start_y, end_x, end_y, geom
     FROM prepared
     WHERE start_x <> end_x OR start_y <> end_y
@@ -364,8 +372,8 @@ WITH segment_batch AS MATERIALIZED (
     LIMIT :batch_size
 ), inserted AS (
     INSERT INTO road_network_edges_next
-        (id, feature_id, road_type, direction, max_speed, access, service, source, target, geom)
-    SELECT s.id, s.feature_id, s.road_type, s.direction, s.max_speed, s.access, s.service,
+        (id, feature_id, road_type, direction, max_speed, lane_count, surface, access, service, source, target, geom)
+    SELECT s.id, s.feature_id, s.road_type, s.direction, s.max_speed, s.lane_count, s.surface, s.access, s.service,
            source_vertex.id, target_vertex.id, s.geom
     FROM segment_batch s
     JOIN road_network_vertices_next source_vertex
@@ -427,7 +435,7 @@ async def _build_indexes() -> None:
             await db.commit()
 
 
-async def _publish(edge_count: int, vertices_count: int) -> None:
+async def _publish(edge_count: int, vertices_count: int, build_source_revision: int) -> None:
     statements = (
         "ALTER TABLE road_network_edges RENAME TO road_network_edges_previous",
         "ALTER TABLE road_network_vertices RENAME TO road_network_vertices_previous",
@@ -448,16 +456,28 @@ async def _publish(edge_count: int, vertices_count: int) -> None:
     await _update_state(phase="publishing", progress=99)
     async with async_session() as db:
         async with db.begin():
+            source_revision = (await db.execute(text(
+                "SELECT source_revision FROM road_network_build_state WHERE id = 1 FOR UPDATE"
+            ))).scalar_one()
+            if source_revision != build_source_revision:
+                raise RuntimeError(
+                    "Roads changed during the rebuild; the previous graph remains published."
+                )
             for statement in statements:
                 await db.execute(text(statement))
             await db.execute(text("""
                 UPDATE road_network_build_state
                 SET status = 'done', phase = 'done', progress = 100,
                     edge_count = :edge_count, vertices_count = :vertices_count,
+                    is_stale = FALSE, published_revision = :build_source_revision,
                     published_at = now(), finished_at = now(), updated_at = now(),
                     error = NULL
                 WHERE id = 1
-            """), {"edge_count": edge_count, "vertices_count": vertices_count})
+            """), {
+                "edge_count": edge_count,
+                "vertices_count": vertices_count,
+                "build_source_revision": build_source_revision,
+            })
 
 
 async def _cleanup_stage() -> None:
@@ -469,8 +489,11 @@ async def _cleanup_stage() -> None:
 
 async def _run_job() -> None:
     try:
-        roads_total = await _prepare()
-        await _update_state(roads_total=roads_total)
+        roads_total, build_source_revision = await _prepare()
+        await _update_state(
+            roads_total=roads_total,
+            build_source_revision=build_source_revision,
+        )
         segments_total = await _build_segments(roads_total)
         await _update_state(
             phase="vertices", progress=45, segments_total=segments_total,
@@ -480,7 +503,7 @@ async def _run_job() -> None:
         await _update_state(phase="edges", progress=70, segments_processed=0)
         edge_count = await _build_edges(segments_total)
         await _build_indexes()
-        await _publish(edge_count, vertices_count)
+        await _publish(edge_count, vertices_count, build_source_revision)
         with suppress(Exception):
             await _cleanup_stage()
     except asyncio.CancelledError:

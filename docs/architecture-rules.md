@@ -56,7 +56,8 @@ commit with the reason.
 - **B7 — One import pipeline.** The four OSM import endpoints share a single
   fetch → parse → upsert service parameterized per kind. Kind-specific logic
   is limited to the Overpass query and element→Feature builder. Tombstoned
-  rows are never resurrected by imports.
+  rows are never resurrected by imports, and user-edited imports are promoted
+  to manual local overrides that later imports cannot replace.
 - **B8 — External calls are bounded and identified.** Overpass requests carry
   a descriptive User-Agent, use explicit timeouts, fall back across public
   instances, and reuse one HTTP client managed by the app lifespan.
@@ -95,7 +96,8 @@ commit with the reason.
   `geometry.js`, layer-id lists and visibility helpers in `layers.js`,
   map construction in `map-setup.js`, user-visible strings in `strings.js`,
   route interaction in `route-ui.js`, rebuild polling in `road-network-ui.js`,
-  controlled road form options in `road-options.js`, emoji/label anchors in
+  road draft/snapping rules in `road-editing.js`, controlled road form options
+  and class-based speed defaults in `road-options.js`, emoji/label anchors in
   `emoji-icons.js`, and basemap masking in `base-masks.js`. The client
   (`client.js`) reuses these modules; it never redefines them.
 - **F2 — One API client.** All requests go through `api.js`, which raises

@@ -1,23 +1,37 @@
 import { ApiError, routeApi } from './api.js';
 import { t } from './strings.js';
 
+export function networkStatePresentation(status) {
+  if (status?.status === 'running') return { key: 'roadNetworkStateRebuilding', tone: 'rebuilding' };
+  if (status?.is_stale) return { key: 'roadNetworkStateStale', tone: 'stale' };
+  if (!status?.published_at) return { key: 'roadNetworkStateMissing', tone: 'stale' };
+  return { key: 'roadNetworkStateFresh', tone: 'fresh' };
+}
+
 export class RoadNetworkUI {
-  constructor({ button, onStatus }) {
+  constructor({ button, stateElement, onStatus, onRebuilt }) {
     this.button = button;
+    this.stateElement = stateElement;
     this.onStatus = onStatus;
+    this.onRebuilt = onRebuilt;
     this.pollTimer = null;
     this.isAdmin = false;
+    this.hasUser = false;
+    this.lastStatus = null;
+    this.wasRunning = false;
     button.addEventListener('click', () => this.start());
   }
 
-  setAdmin(isAdmin) {
-    this.isAdmin = isAdmin;
-    this.button.hidden = !isAdmin;
-    if (isAdmin) this.resume();
+  setUser(user) {
+    this.hasUser = Boolean(user);
+    this.isAdmin = Boolean(user?.is_admin);
+    this.button.hidden = !this.isAdmin;
+    if (this.hasUser) this.resume();
     else this.stopPolling();
   }
 
   async start() {
+    if (!this.isAdmin) return;
     this.button.disabled = true;
     try {
       await routeApi.rebuild();
@@ -31,25 +45,51 @@ export class RoadNetworkUI {
         return;
       }
     }
+    this.wasRunning = true;
+    this.render({ ...(this.lastStatus || {}), status: 'running' });
     this.onStatus(t('roadNetworkRebuildStarted'));
     this.poll();
   }
 
   async resume() {
-    if (!this.isAdmin) return;
+    if (!this.hasUser) return;
     try {
       const status = await routeApi.rebuildStatus();
+      this.lastStatus = status;
+      this.render(status);
       if (status.status !== 'running') return;
+      this.wasRunning = true;
       this.button.disabled = true;
-      this.onStatus(t('roadNetworkRebuildStarted'));
       this.poll();
     } catch (error) {
       console.error('Unable to resume road network rebuild status', error);
     }
   }
 
+  async refresh() {
+    if (!this.hasUser) return;
+    try {
+      const status = await routeApi.rebuildStatus();
+      this.lastStatus = status;
+      this.render(status);
+    } catch (error) {
+      console.error('Unable to read road network status', error);
+    }
+  }
+
+  markStale() {
+    this.lastStatus = { ...(this.lastStatus || {}), is_stale: true };
+    this.render(this.lastStatus);
+  }
+
+  render(status) {
+    const presentation = networkStatePresentation(status);
+    this.stateElement.textContent = t(presentation.key);
+    this.stateElement.dataset.state = presentation.tone;
+  }
+
   async poll() {
-    if (!this.isAdmin) return;
+    if (!this.hasUser) return;
     this.stopPolling();
     let status;
     try {
@@ -59,8 +99,11 @@ export class RoadNetworkUI {
       this.button.disabled = false;
       return;
     }
-    if (!this.isAdmin) return;
+    if (!this.hasUser) return;
+    this.lastStatus = status;
+    this.render(status);
     if (status.status === 'running') {
+      this.wasRunning = true;
       this.onStatus(t('roadNetworkRebuildProgress', {
         progress: status.progress ?? 0,
         processed: status.roads_processed ?? 0,
@@ -77,6 +120,10 @@ export class RoadNetworkUI {
         : t('roadNetworkRebuildFailed'),
       status.status !== 'done',
     );
+    if (this.wasRunning && status.status === 'done' && !status.is_stale) {
+      this.wasRunning = false;
+      await this.onRebuilt?.(status);
+    }
   }
 
   stopPolling() {

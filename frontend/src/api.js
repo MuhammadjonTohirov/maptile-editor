@@ -51,8 +51,14 @@ export const featuresApi = {
   listInBounds: (bbox, limit) => request(`/api/features?bbox=${bbox}&limit=${limit}`),
   get: (id) => request(`/api/features/${id}`),
   create: (payload) => request('/api/features', { method: 'POST', body: payload }),
-  update: (id, payload) => request(`/api/features/${id}`, { method: 'PUT', body: payload }),
-  remove: (id) => request(`/api/features/${id}`, { method: 'DELETE' }),
+  update: (id, payload, { confirmPublished = false } = {}) => request(
+    `/api/features/${id}${confirmPublished ? '?confirm_published=true' : ''}`,
+    { method: 'PUT', body: payload },
+  ),
+  remove: (id, { confirmPublished = false } = {}) => request(
+    `/api/features/${id}${confirmPublished ? '?confirm_published=true' : ''}`,
+    { method: 'DELETE' },
+  ),
   clearAll: () => request('/api/features/clear-all', { method: 'DELETE' }),
   importOsm: (kind, bounds) => request(`/api/load-osm-${kind}`, { method: 'POST', body: bounds }),
 };

@@ -75,8 +75,10 @@ PostGIS (host :5434; internal :5432)
 - Frontend (`frontend/src/`): `main.js` is the MapEditor orchestrator;
   `client.js` the read-only viewer. Both share `api.js` (the only HTTP
   client; throws `ApiError` with status). `route-ui.js` owns route picking,
-  `road-network-ui.js` owns rebuild polling, and `road-options.js` owns the
-  controlled road form catalog. Both map pages share `geometry.js`, `layers.js`
+  `road-network-ui.js` owns rebuild polling, `road-editing.js` owns road draft,
+  validation, and endpoint-snapping rules, and `road-options.js` owns the
+  controlled road form catalog and speed defaults. Both map pages share
+  `geometry.js`, `layers.js`
   (layer-id lists + guarded visibility helper), `map-setup.js`,
   `strings.js` (all user-visible copy, `t(key, params)`), `emoji-icons.js`,
   and `base-masks.js`. `strings.js` resolves the locale (`?lang=` → saved
@@ -162,8 +164,11 @@ backend is volume-mounted and reloads on save.
 ## Editing model
 
 - Use Terra Draw modes for point, road, polygon, rectangle, circle, and
-  select/edit operations. Roads snap to the nearest point on saved road
-  segments within an eight-metre maximum; other shapes snap to saved vertices.
+  select/edit operations. Roads snap to the nearest point on another saved road
+  segment within an eight-metre maximum; existing roads never snap to themselves
+  and only their endpoints use segment snapping. Road edits remain client-side
+  drafts until Save; Cancel or Escape discards them without an API write. Other
+  shapes snap to saved vertices.
   Selected features support whole-feature
   drag, rotate (Ctrl+R+drag), and scale (Ctrl+S+drag).
 - Icons/emoji render from the `editor_anchors` GeoJSON source (one anchor
@@ -177,7 +182,8 @@ backend is volume-mounted and reloads on save.
   like "Service Road" — and re-imports only backfill an empty name, never
   overwrite one. Features without a name render no label anywhere.
 - The editor keeps a client-side undo stack (`pushUndo`) of inverse API calls
-  for create/update/delete/duplicate/restore; Undo button or Ctrl+Z.
+  for create/update/delete/duplicate/restore; Undo button or Ctrl+Z. A selected
+  road first undoes draft geometry steps before consuming persisted undo entries.
 - The frontend persists edits through `/api/features` and refreshes the Martin
   PostGIS vector source after each change.
 - Routing uses pgRouting 4.0.1 over an application-owned graph. Rebuilds split
@@ -187,10 +193,14 @@ backend is volume-mounted and reloads on save.
   OSM node topology instead of interpreting every geometric crossing as a
   junction (bridges and tunnels can cross without connecting). Manual road
   endpoints inside the eight-metre snap range are projected onto their nearest
-  host road and only that host road is split in the derived graph. Feature edits
-  refresh map tiles immediately but require an admin rebuild before routes use
-  them. Car costs honor OSM/editor access restrictions and prefer through-road
-  classes over service shortcuts without distorting the displayed ETA.
+  host road and only that host road is split in the derived graph. Statement-level
+  database triggers advance a source revision for every road mutation and mark
+  the graph stale. A
+  rebuild publishes only if that source revision stayed unchanged; otherwise the
+  previous graph remains active. Stale route responses identify that they used
+  the previous published graph. Car costs honor OSM/editor access restrictions
+  and prefer through-road classes over service shortcuts without distorting the
+  displayed ETA.
 - Never feed rendered tile geometry to Terra Draw or persist it: it is clipped
   per tile, quantized, and can be Multi*. Selection reloads the authoritative
   geometry from `/api/features/{id}`, and every geometry entering the editor is
@@ -202,6 +212,9 @@ backend is volume-mounted and reloads on save.
   stored properties before sending.
 - Optional OSM imports are bounded to a small viewport and are upserted using
   OSM type and ID. Imported features are marked `source_kind=osm_import`.
+  The first authenticated editor update promotes one to `source_kind=manual`;
+  later OSM refreshes keep its identity for deduplication but never overwrite
+  its local geometry or controlled attributes.
 - `scripts/load-uzbekistan-osm.sh` bulk-loads the entire country's OSM
   buildings, roads, and street furniture into the features table in one pass
   (GDAL stages the PBF, `load-uzbekistan-osm.sql` transforms it with the same
@@ -228,10 +241,11 @@ backend is volume-mounted and reloads on save.
   the geometry GIST index, so `serializers.geojson_query()` must stay
   unordered; every read is capped (`/api/features` at `FULL_BASE_THRESHOLD`,
   viewport reads at `FEATURE_QUERY_LIMIT`) so no route dumps millions of rows.
-- While editing at zoom ≥ 15, viewport roads are imported automatically
+- In small-data overlay mode, editing at zoom ≥ 15 imports viewport roads automatically
   (`prepareViewportRoads`) so every road is a tappable editor feature with its
   full OSM geometry — base road tiles are fragmented per tile and too thin to
-  hit reliably. Click selection also uses a 6px box around the pointer.
+  hit reliably. Full-base mode already owns full PostGIS geometries and must
+  not run that redundant import. Click selection also uses a 6px box around the pointer.
 - Two overlays make road connectivity visible: a live ring (`snap_indicator`
   source) follows the cursor while drawing/dragging whenever a nearby road
   segment is in the bounded snap range — driven by
@@ -246,8 +260,9 @@ backend is volume-mounted and reloads on save.
   only runs while Terra Draw is in `select` mode (`bindMapInteractions`); a
   click during point/line/polygon drawing belongs to Terra Draw alone; the
   same guard is why the two coexist without one hijacking the other's clicks.
-- Manual edits are marked `source_kind=manual` and stay visually distinct from
-  imported OSM data.
+- New features and user-edited imports are marked `source_kind=manual`; this is
+  both the durable local-override boundary and what enables endpoint-to-segment
+  junction splitting for edited roads.
 - A business is a point feature (`feature_type=business`) registered inside a
   building through the `building_id` column (FK with ON DELETE SET NULL, so
   deleting the building keeps its businesses as free-standing POIs). Several

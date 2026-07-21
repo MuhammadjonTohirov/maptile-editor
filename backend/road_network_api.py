@@ -18,7 +18,7 @@ router = APIRouter()
 @router.get("/road-network/status")
 async def road_network_status(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_user),
 ):
     return await road_network.status(db)
 
@@ -42,9 +42,11 @@ async def get_route(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_user),
 ):
-    if not await road_network.network_ready(db):
+    network_state = await road_network.network_state(db)
+    if not network_state["ready"]:
         raise HTTPException(status_code=409, detail="Road network has not been built yet")
     route = await road_network.find_route(db, from_lng, from_lat, to_lng, to_lat, profile)
     if route is None:
         raise HTTPException(status_code=404, detail="No route found")
+    route["network_stale"] = network_state["is_stale"]
     return route

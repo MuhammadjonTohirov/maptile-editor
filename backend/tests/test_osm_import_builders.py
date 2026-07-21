@@ -1,4 +1,13 @@
-from osm_import import IMPORT_KINDS, _build_candidates
+import asyncio
+from types import SimpleNamespace
+
+from osm_import import (
+    IMPORT_KINDS,
+    _REPLACEABLE_ATTRIBUTES,
+    _build_candidates,
+    _can_refresh_from_osm,
+    run_import,
+)
 from schemas import BoundsRequest
 
 BOUNDS = BoundsRequest(west=69.2, south=41.3, east=69.3, north=41.4)
@@ -62,8 +71,48 @@ def test_road_builder_keeps_only_real_street_names():
 def test_reimport_never_replaces_a_title():
     # The name column is the user-facing title; the upsert may only backfill
     # an empty one, so it must stay out of the replaceable attribute list.
-    from osm_import import _REPLACEABLE_ATTRIBUTES
     assert "name" not in _REPLACEABLE_ATTRIBUTES
+
+
+def test_reimport_never_replaces_editor_owned_source_kind():
+    assert "source_kind" not in _REPLACEABLE_ATTRIBUTES
+    assert _can_refresh_from_osm(SimpleNamespace(source_kind="osm_import"))
+    assert not _can_refresh_from_osm(SimpleNamespace(source_kind="manual"))
+    assert not _can_refresh_from_osm(SimpleNamespace(source_kind="base_tombstone"))
+
+
+def test_run_import_preserves_a_manual_osm_road(monkeypatch):
+    existing = SimpleNamespace(osm_id="1", source_kind="manual", road_type="primary")
+
+    class Result:
+        @staticmethod
+        def scalars():
+            return [existing]
+
+    class Database:
+        committed = False
+
+        @staticmethod
+        async def execute(_query):
+            return Result()
+
+        @staticmethod
+        def add(_feature):
+            raise AssertionError("the existing local override must not be inserted again")
+
+        async def commit(self):
+            self.committed = True
+
+    async def fetched(_query):
+        return {"elements": [way({"highway": "pedestrian"})]}
+
+    monkeypatch.setattr("osm_import.fetch_overpass", fetched)
+    database = Database()
+    result = asyncio.run(run_import(IMPORT_KINDS["roads"], BOUNDS, database))
+
+    assert existing.road_type == "primary"
+    assert result["roads_loaded"] == 0
+    assert database.committed
 
 
 def test_streetlight_builder_requires_lamp_tag():
