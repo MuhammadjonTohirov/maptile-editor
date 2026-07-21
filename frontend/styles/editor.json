@@ -31,6 +31,34 @@
         "type": "FeatureCollection",
         "features": []
       }
+    },
+    "road_connectivity": {
+      "type": "geojson",
+      "data": {
+        "type": "FeatureCollection",
+        "features": []
+      }
+    },
+    "snap_indicator": {
+      "type": "geojson",
+      "data": {
+        "type": "FeatureCollection",
+        "features": []
+      }
+    },
+    "route_points": {
+      "type": "geojson",
+      "data": {
+        "type": "FeatureCollection",
+        "features": []
+      }
+    },
+    "route_line": {
+      "type": "geojson",
+      "data": {
+        "type": "FeatureCollection",
+        "features": []
+      }
     }
   },
   "layers": [
@@ -1257,6 +1285,65 @@
           0
         ],
         "fill-extrusion-opacity": 0.82
+      }
+    },
+    {
+      "id": "editor-road-connectivity",
+      "type": "circle",
+      "source": "road_connectivity",
+      "minzoom": 15,
+      "paint": {
+        "circle-radius": 4,
+        "circle-color": [
+          "case",
+          ["get", "connected"],
+          "#16a34a",
+          "#ef4444"
+        ],
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 1.5
+      }
+    },
+    {
+      "id": "editor-snap-indicator",
+      "type": "circle",
+      "source": "snap_indicator",
+      "paint": {
+        "circle-radius": 9,
+        "circle-color": "#16a34a",
+        "circle-opacity": 0.25,
+        "circle-stroke-color": "#16a34a",
+        "circle-stroke-width": 2
+      }
+    },
+    {
+      "id": "editor-route-line",
+      "type": "line",
+      "source": "route_line",
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#7c3aed",
+        "line-width": 5,
+        "line-opacity": 0.85
+      }
+    },
+    {
+      "id": "editor-route-points",
+      "type": "circle",
+      "source": "route_points",
+      "paint": {
+        "circle-radius": 7,
+        "circle-color": [
+          "case",
+          ["==", ["get", "role"], "a"],
+          "#2563eb",
+          "#f59e0b"
+        ],
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 2
       }
     }
   ]

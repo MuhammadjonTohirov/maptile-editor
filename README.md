@@ -66,6 +66,31 @@ Refresh it monthly alongside the tile archive.
 | Martin | internal only | Serves MBTiles basemap and PostGIS overlay tiles |
 | PostGIS | localhost:5434 (configurable) | Editor feature storage |
 
+## Routing
+
+The authenticated editor can calculate walking, bicycle, and car routes over a
+self-hosted pgRouting 4.0.1 graph. An admin starts a rebuild from the editor;
+the UI reports processed roads, prepared edges, and overall progress.
+
+The builder follows OSM's topology model: consecutive nodes in each road way
+become directed graph edges, and equal OSM node coordinates become shared graph
+vertices. It does not treat every geometric crossing as a junction, because a
+bridge and the road below it may cross on the map without connecting. A manual
+road endpoint placed within the editor's eight-metre snap range is projected
+onto the nearest host road and only that host road is split in the derived
+graph. Work is performed in committed shadow-table batches and the finished
+graph is published atomically, so a previously built graph remains available
+during later rebuilds.
+
+Road edits refresh rendered vector tiles immediately but do not silently mutate
+the routing graph. Run a rebuild after adding, removing, or reshaping roads. A
+manual road endpoint must show the snap ring/green connectivity marker; merely
+crossing a road line away from an endpoint does not create a routable junction.
+Road class, access, direction, lanes, speed, and surface are selected from
+controlled values rather than typed free-form. Car routing rejects pedestrian
+classes and access restrictions and penalizes service-road shortcuts in favor
+of appropriate through roads.
+
 The browser accesses vectors only through the frontend origin:
 
 - `/tiles/base/{z}/{x}/{y}` — immutable OpenMapTiles-compatible OSM base
@@ -83,8 +108,8 @@ an invisible tombstone row (`source_kind=base_tombstone`) so the object stays
 removed from the map; individual objects can be restored from the editor's
 "Hidden basemap objects" list, and clearing editor data restores everything.
 
-Editor tools: point/line/polygon/rectangle/circle drawing with vertex snapping
-to saved features, whole-feature drag plus rotate (Ctrl+R) and scale (Ctrl+S),
+Editor tools: point/road/polygon/rectangle/circle drawing with road-segment
+snapping (and vertex snapping for other shapes), whole-feature drag plus rotate (Ctrl+R) and scale (Ctrl+S),
 duplicate, undo (Ctrl+Z), search-by-name with fly-to, and per-feature emoji
 icons, which appear only at street-level zooms. Businesses can be registered
 into a building — several per building — as draggable point features with a

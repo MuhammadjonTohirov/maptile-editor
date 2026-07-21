@@ -14,6 +14,7 @@ from auth import require_admin, require_user
 from config import FEATURE_QUERY_LIMIT, FULL_BASE_THRESHOLD
 from database import get_db
 from models import Feature, User
+from road_catalog import RoadValueError, validate_road_values
 from schemas import (
     AppMeta,
     FeatureCreate,
@@ -26,6 +27,24 @@ from schemas import (
 from serializers import feature_response, geojson_query, row_to_geojson
 
 router = APIRouter()
+
+
+def _validate_road_values_or_422(
+    feature_type: Optional[str],
+    road_type: Optional[str],
+    properties: Optional[Dict[str, Any]],
+    *,
+    previous_road_type: Optional[str] = None,
+) -> None:
+    try:
+        validate_road_values(
+            feature_type,
+            road_type,
+            properties,
+            previous_road_type=previous_road_type,
+        )
+    except RoadValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 def _bbox_filter(bbox: str):
@@ -135,6 +154,7 @@ async def create_feature(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),
 ):
+    _validate_road_values_or_422(feature.feature_type, feature.road_type, feature.properties)
     db_feature = Feature(
         geometry=_geometry_or_422(feature.geometry),
         created_by=user.id,
@@ -166,6 +186,15 @@ async def update_feature(
     # cleared. The editor always sends the full payload, so clearing an icon
     # or road attribute round-trips correctly.
     update_data = feature_update.model_dump(exclude_unset=True)
+    resulting_feature_type = update_data.get("feature_type", db_feature.feature_type)
+    resulting_road_type = update_data.get("road_type", db_feature.road_type)
+    resulting_properties = update_data.get("properties", db_feature.properties)
+    _validate_road_values_or_422(
+        resulting_feature_type,
+        resulting_road_type,
+        resulting_properties,
+        previous_road_type=db_feature.road_type,
+    )
     geometry = update_data.pop("geometry", None)
     if geometry is not None:
         update_data["geometry"] = _geometry_or_422(geometry)

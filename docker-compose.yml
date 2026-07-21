@@ -1,7 +1,7 @@
 
 services:
   db:
-    image: postgis/postgis:15-3.5
+    build: ./db
     platform: linux/amd64
     container_name: map-editor-db
     environment:

@@ -32,6 +32,8 @@ h2 { font-size: 14px; }
 section { border-top: 1px solid #dce4ec; padding: 13px 0; }
 section h2 { margin-bottom: 9px; }
 .button-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.road-draw-setup { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 9px; margin-top: 9px; color: #405168; font-size: 12px; font-weight: 650; }
+.road-draw-setup select { min-width: 0; padding: 6px 8px; }
 button { min-height: 34px; border: 1px solid #cbd6e2; border-radius: 8px; padding: 7px 9px; background: #fff; color: #1d2b3c; cursor: pointer; font: inherit; font-size: 12px; font-weight: 650; }
 button:hover:not(:disabled) { border-color: #7890aa; background: #f6f9fc; }
 button:disabled { cursor: not-allowed; opacity: .48; }

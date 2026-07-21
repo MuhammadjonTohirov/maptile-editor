@@ -8,6 +8,7 @@ import auth_api
 import bulk_api
 import features_api
 import imports_api
+import road_network_api
 from auth import ensure_bootstrap_admin
 from config import CORS_ORIGINS
 from overpass import close_client
@@ -37,6 +38,7 @@ app.include_router(auth_api.router)
 app.include_router(bulk_api.router)
 app.include_router(features_api.router)
 app.include_router(imports_api.router)
+app.include_router(road_network_api.router)
 
 
 @app.get("/")

@@ -20,6 +20,150 @@ export function collectVertices(features) {
   return vertices;
 }
 
+function coordinateKey([lng, lat]) {
+  return `${lng},${lat}`;
+}
+
+function closestPointOnSegment([lng, lat], [aLng, aLat], [bLng, bLat]) {
+  const scale = Math.cos((lat * Math.PI) / 180);
+  const px = lng * scale;
+  const ax = aLng * scale;
+  const bx = bLng * scale;
+  const abX = bx - ax;
+  const abY = bLat - aLat;
+  const lengthSquared = abX * abX + abY * abY;
+  const t = lengthSquared
+    ? Math.max(0, Math.min(1, ((px - ax) * abX + (lat - aLat) * abY) / lengthSquared))
+    : 0;
+  const coordinate = [aLng + (bLng - aLng) * t, aLat + (bLat - aLat) * t];
+  const dLng = (coordinate[0] - lng) * scale;
+  const dLat = coordinate[1] - lat;
+  return { coordinate, distanceSquared: dLng * dLng + dLat * dLat };
+}
+
+export function collectRoadSegments(features) {
+  return features
+    .filter((feature) => feature.properties?.feature_type === 'road' && feature.geometry?.type === 'LineString')
+    .flatMap((feature) => feature.geometry.coordinates.slice(1).map((position, index) => ({
+      owner: String(feature.id),
+      a: feature.geometry.coordinates[index],
+      b: position,
+      west: Math.min(feature.geometry.coordinates[index][0], position[0]),
+      south: Math.min(feature.geometry.coordinates[index][1], position[1]),
+      east: Math.max(feature.geometry.coordinates[index][0], position[0]),
+      north: Math.max(feature.geometry.coordinates[index][1], position[1]),
+    })));
+}
+
+// Mousemove snapping and endpoint connectivity both ask for segments close to
+// one point. A small grid avoids rescanning every road segment on every frame.
+export class RoadSegmentIndex {
+  constructor(segments = [], cellSize = 0.0005) {
+    this.cellSize = cellSize;
+    this.cells = new Map();
+    this.longSegments = [];
+    for (const segment of segments) this.add(segment);
+  }
+
+  static fromFeatures(features) {
+    return new RoadSegmentIndex(collectRoadSegments(features));
+  }
+
+  cell(value) {
+    return Math.floor(value / this.cellSize);
+  }
+
+  key(x, y) {
+    return `${x}:${y}`;
+  }
+
+  add(segment) {
+    const west = this.cell(segment.west);
+    const east = this.cell(segment.east);
+    const south = this.cell(segment.south);
+    const north = this.cell(segment.north);
+    const cellCount = (east - west + 1) * (north - south + 1);
+    if (cellCount > 200) {
+      this.longSegments.push(segment);
+      return;
+    }
+    for (let x = west; x <= east; x += 1) {
+      for (let y = south; y <= north; y += 1) {
+        const key = this.key(x, y);
+        if (!this.cells.has(key)) this.cells.set(key, []);
+        this.cells.get(key).push(segment);
+      }
+    }
+  }
+
+  candidates(lng, lat, threshold) {
+    const found = new Set(this.longSegments);
+    const longitudeThreshold = threshold / Math.max(Math.cos((lat * Math.PI) / 180), 0.01);
+    for (let x = this.cell(lng - longitudeThreshold); x <= this.cell(lng + longitudeThreshold); x += 1) {
+      for (let y = this.cell(lat - threshold); y <= this.cell(lat + threshold); y += 1) {
+        for (const segment of this.cells.get(this.key(x, y)) || []) found.add(segment);
+      }
+    }
+    return found;
+  }
+
+  nearest(lng, lat, threshold, excludedOwner) {
+    let best;
+    let bestDistance = threshold * threshold;
+    for (const segment of this.candidates(lng, lat, threshold)) {
+      if (excludedOwner && segment.owner === String(excludedOwner)) continue;
+      const candidate = closestPointOnSegment([lng, lat], segment.a, segment.b);
+      if (candidate.distanceSquared < bestDistance) {
+        bestDistance = candidate.distanceSquared;
+        best = { ...candidate, segment };
+      }
+    }
+    return best;
+  }
+
+  nearestCoordinate(lng, lat, threshold, excludedOwner) {
+    return this.nearest(lng, lat, threshold, excludedOwner)?.coordinate;
+  }
+
+  hasOtherRoadAt(position, owner, threshold) {
+    return Boolean(this.nearest(position[0], position[1], threshold, owner));
+  }
+}
+
+export function roadConnectivity(roadFeatures, segmentIndex = RoadSegmentIndex.fromFeatures(roadFeatures)) {
+  const lines = roadFeatures.filter((feature) => feature.geometry?.type === 'LineString');
+  const owners = new Map();
+  for (const feature of lines) {
+    const id = String(feature.id);
+    for (const position of feature.geometry.coordinates) {
+      const key = coordinateKey(position);
+      if (!owners.has(key)) owners.set(key, new Set());
+      owners.get(key).add(id);
+    }
+  }
+  return lines.flatMap((feature) => {
+    const coordinates = feature.geometry.coordinates;
+    const ends = coordinates.length > 1
+      ? [coordinates[0], coordinates[coordinates.length - 1]]
+      : [coordinates[0]];
+    return ends.map((position) => {
+      const exactConnection = owners.get(coordinateKey(position)).size > 1;
+      // Manual road endpoints may join the middle of an existing segment. The
+      // topology builder nodes that host segment locally, so the overlay must
+      // recognize the same connection even though the stored host line has no
+      // explicit vertex there. Half a metre covers coordinate rounding only;
+      // visible snapping itself uses the stricter zoom-aware threshold below.
+      const segmentConnection = !exactConnection
+        && segmentIndex.hasOtherRoadAt(position, feature.id, 0.5 / 111_320);
+      return {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: position },
+        properties: { connected: exactConnection || segmentConnection, road_id: String(feature.id) },
+      };
+    });
+  });
+}
+
 export function offsetGeometry(geometry, delta = 0.00018) {
   const shift = (coordinates) => (typeof coordinates[0] === 'number'
     ? [coordinates[0] + delta, coordinates[1] + delta]
@@ -52,7 +196,7 @@ function averageLat(points) {
 
 // Longitude degrees shrink toward the poles; this keeps the ops below acting
 // on roughly-Cartesian meters instead of distorting east-west distances
-// (same correction snapToEditorVertex uses in main.js).
+// (same correction the editor snapping code uses in main.js).
 function toXY(points, originLat) {
   const scale = Math.cos((originLat * Math.PI) / 180);
   return points.map(([lng, lat]) => [lng * scale, lat]);

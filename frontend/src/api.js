@@ -64,6 +64,16 @@ export const bulkApi = {
   start: (country) => request('/api/bulk-load', { method: 'POST', body: { country } }),
 };
 
+// A→B shortest path over the live road network (pgRouting), plus the
+// admin-only rebuild that keeps that network in sync with edits.
+export const routeApi = {
+  find: (from, to, profile) => request(
+    `/api/route?from_lng=${from[0]}&from_lat=${from[1]}&to_lng=${to[0]}&to_lat=${to[1]}&profile=${profile}`,
+  ),
+  rebuildStatus: () => request('/api/road-network/status'),
+  rebuild: () => request('/api/road-network/rebuild', { method: 'POST' }),
+};
+
 // Auth + user management. The session lives in an httpOnly cookie the browser
 // sends automatically, so there is no token to attach here.
 export const authApi = {

@@ -94,9 +94,10 @@ commit with the reason.
   orchestration. HTTP access lives in `api.js`, geometry math in
   `geometry.js`, layer-id lists and visibility helpers in `layers.js`,
   map construction in `map-setup.js`, user-visible strings in `strings.js`,
-  emoji/label anchors in `emoji-icons.js`, basemap masking in
-  `base-masks.js`. The client (`client.js`) reuses these modules; it never
-  redefines them.
+  route interaction in `route-ui.js`, rebuild polling in `road-network-ui.js`,
+  controlled road form options in `road-options.js`, emoji/label anchors in
+  `emoji-icons.js`, and basemap masking in `base-masks.js`. The client
+  (`client.js`) reuses these modules; it never redefines them.
 - **F2 — One API client.** All requests go through `api.js`, which raises
   `ApiError` with the HTTP status and the server's `detail` message. Callers
   branch on `error.status` (e.g. 404 → refresh ghost features), never on
@@ -116,7 +117,9 @@ commit with the reason.
   (line-placed road labels; polygon labels are omitted at that scale).
 - **F5 — Form state is explicit.** Selecting a feature populates the property
   form; clearing the selection resets it. A new drawing must never inherit
-  values left over from a previously selected feature.
+  values left over from a previously selected feature. The Road tool stays
+  disabled until a controlled road class is selected; road routing attributes
+  are selections, never free-form text.
 - **F6 — Guarded style mutations.** Code that shows/hides or repaints layers
   goes through `layers.js` helpers that check `map.getLayer` first, so a
   style edit cannot crash the app at runtime.

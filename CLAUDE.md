@@ -68,11 +68,15 @@ PostGIS (host :5434; internal :5432)
   app; `features_api.py` (CRUD routes), `imports_api.py` (import routes),
   `osm_import.py` (shared fetch→parse→upsert pipeline), `overpass.py`
   (Overpass client + tag parsing), `serializers.py` (row→API shapes),
-  `schemas.py`, `models.py`, `database.py`, `config.py`. Unit tests in
+  `road_network.py` (route costing/query assembly), `road_network_builder.py`
+  (batched pgRouting 4 topology publication), `schemas.py`, `models.py`,
+  `database.py`, `config.py`. Unit tests in
   `backend/tests/` run without a database.
 - Frontend (`frontend/src/`): `main.js` is the MapEditor orchestrator;
   `client.js` the read-only viewer. Both share `api.js` (the only HTTP
-  client; throws `ApiError` with status), `geometry.js`, `layers.js`
+  client; throws `ApiError` with status). `route-ui.js` owns route picking,
+  `road-network-ui.js` owns rebuild polling, and `road-options.js` owns the
+  controlled road form catalog. Both map pages share `geometry.js`, `layers.js`
   (layer-id lists + guarded visibility helper), `map-setup.js`,
   `strings.js` (all user-visible copy, `t(key, params)`), `emoji-icons.js`,
   and `base-masks.js`. `strings.js` resolves the locale (`?lang=` → saved
@@ -157,9 +161,10 @@ backend is volume-mounted and reloads on save.
 
 ## Editing model
 
-- Use Terra Draw modes for point, line, polygon, rectangle, circle, and
-  select/edit operations. Drawing and vertex drags snap to saved editor
-  vertices (`snapToEditorVertex`); selected features support whole-feature
+- Use Terra Draw modes for point, road, polygon, rectangle, circle, and
+  select/edit operations. Roads snap to the nearest point on saved road
+  segments within an eight-metre maximum; other shapes snap to saved vertices.
+  Selected features support whole-feature
   drag, rotate (Ctrl+R+drag), and scale (Ctrl+S+drag).
 - Icons/emoji render from the `editor_anchors` GeoJSON source (one anchor
   point per feature — never from tiled geometry, which would duplicate symbols
@@ -175,6 +180,17 @@ backend is volume-mounted and reloads on save.
   for create/update/delete/duplicate/restore; Undo button or Ctrl+Z.
 - The frontend persists edits through `/api/features` and refreshes the Martin
   PostGIS vector source after each change.
+- Routing uses pgRouting 4.0.1 over an application-owned graph. Rebuilds split
+  every road at its existing geometry vertices, merge exact shared coordinates
+  into graph nodes, construct logged shadow tables in batches with observable
+  road/segment/vertex counts, then publish atomically. This deliberately trusts
+  OSM node topology instead of interpreting every geometric crossing as a
+  junction (bridges and tunnels can cross without connecting). Manual road
+  endpoints inside the eight-metre snap range are projected onto their nearest
+  host road and only that host road is split in the derived graph. Feature edits
+  refresh map tiles immediately but require an admin rebuild before routes use
+  them. Car costs honor OSM/editor access restrictions and prefer through-road
+  classes over service shortcuts without distorting the displayed ETA.
 - Never feed rendered tile geometry to Terra Draw or persist it: it is clipped
   per tile, quantized, and can be Multi*. Selection reloads the authoritative
   geometry from `/api/features/{id}`, and every geometry entering the editor is
@@ -216,6 +232,20 @@ backend is volume-mounted and reloads on save.
   (`prepareViewportRoads`) so every road is a tappable editor feature with its
   full OSM geometry — base road tiles are fragmented per tile and too thin to
   hit reliably. Click selection also uses a 6px box around the pointer.
+- Two overlays make road connectivity visible: a live ring (`snap_indicator`
+  source) follows the cursor while drawing/dragging whenever a nearby road
+  segment is in the bounded snap range — driven by
+  Terra Draw's own `toCustom` callback plus a `mousemove` fallback so it
+  tracks hover, not just clicks — and a green/red dot at every road's two
+  endpoints (`road_connectivity` source, z ≥ 15, `roadConnectivity()` in
+  `geometry.js`) shows whether that endpoint shares a coordinate or lies on
+  another road segment. Green is authoritative for the next graph rebuild;
+  red only means "not connected among the roads currently loaded" — a real
+  junction just outside the loaded viewport/bbox cap can still show red.
+- The editor's own click handler for feature selection and base-feature copy
+  only runs while Terra Draw is in `select` mode (`bindMapInteractions`); a
+  click during point/line/polygon drawing belongs to Terra Draw alone; the
+  same guard is why the two coexist without one hijacking the other's clicks.
 - Manual edits are marked `source_kind=manual` and stay visually distinct from
   imported OSM data.
 - A business is a point feature (`feature_type=business`) registered inside a
