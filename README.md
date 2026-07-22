@@ -73,6 +73,11 @@ Refresh it monthly alongside the tile archive.
 The authenticated editor can calculate walking, bicycle, and car routes over a
 self-hosted pgRouting 4.0.1 graph. An admin starts a rebuild from the editor;
 the UI reports processed roads, prepared edges, and overall progress.
+Route endpoints are projected onto the nearest road allowed for the selected
+profile and routed from that fractional edge position, not from a distant graph
+node. The returned line retains the exact clicked A/B coordinates with short
+access legs, so a route requested from inside a building visibly connects to
+the road network before following it.
 
 The builder follows OSM's topology model: consecutive nodes in each road way
 become directed graph edges, and equal OSM node coordinates become shared graph
