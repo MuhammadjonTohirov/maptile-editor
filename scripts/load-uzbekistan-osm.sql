@@ -6,8 +6,6 @@
 -- a re-run (or a later per-area import of the same object) never duplicates.
 BEGIN;
 
-CREATE EXTENSION IF NOT EXISTS hstore;
-
 -- Buildings: multipolygons carrying a building tag. Closed ways expose
 -- osm_way_id; multipolygon relations expose osm_id.
 INSERT INTO features (

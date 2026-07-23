@@ -347,12 +347,20 @@ async def run_import(kind: ImportKind, bounds: BoundsRequest, db: AsyncSession) 
     osm_data = await fetch_overpass(kind.query(bounds))
     candidates = _build_candidates(kind, osm_data.get("elements", []))
 
+    # Serialize imports at the database boundary. Two workers importing the
+    # same new OSM identity must not both prefetch "missing" and race to insert.
+    await db.execute(text(
+        "SELECT pg_advisory_xact_lock(hashtext('maptile_osm_import'))"
+    ))
+
     # One IN query instead of a SELECT per element (rule B6).
     existing_by_osm_id = {}
     osm_ids = [candidate.osm_id for candidate in candidates]
     if osm_ids:
         result = await db.execute(
-            select(Feature).where(Feature.osm_type == kind.osm_type, Feature.osm_id.in_(osm_ids))
+            select(Feature)
+            .where(Feature.osm_type == kind.osm_type, Feature.osm_id.in_(osm_ids))
+            .with_for_update()
         )
         existing_by_osm_id = {feature.osm_id: feature for feature in result.scalars()}
 

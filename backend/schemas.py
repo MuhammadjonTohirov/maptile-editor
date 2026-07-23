@@ -1,12 +1,29 @@
+import math
 from datetime import datetime
 from typing import Any, Dict, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from feature_domain import validate_feature_geometry, validate_geometry_mapping
 
 # Mirrors the features_source_kind_check DB constraint so bad values fail with
 # 422 at the boundary instead of a database error (rule B5).
 SourceKind = Literal["manual", "osm_import", "base_tombstone"]
 OsmType = Literal["node", "way", "relation"]
+FeatureType = Literal[
+    "point", "poi", "business", "streetlight", "traffic_light",
+    "line", "road", "waterway",
+    "area", "building", "landuse", "park", "water", "forest", "grass",
+    "manual",
+]
+
+
+def _coordinate(value: list[float]) -> list[float]:
+    if len(value) != 2 or not all(math.isfinite(item) for item in value):
+        raise ValueError("road span coordinates must contain two finite numbers")
+    if not (-180 <= value[0] <= 180 and -90 <= value[1] <= 90):
+        raise ValueError("road span coordinates must use valid longitude and latitude")
+    return value
 
 
 class FeatureBase(BaseModel):
@@ -21,7 +38,7 @@ class FeatureBase(BaseModel):
     osm_id: Optional[str] = Field(default=None, max_length=50)  # Reference to original OSM data
     osm_type: Optional[OsmType] = None
     source_kind: SourceKind = "manual"
-    feature_type: Optional[str] = Field(default=None, max_length=64)
+    feature_type: Optional[FeatureType] = None
     height_m: Optional[float] = Field(default=None, ge=0)
     # Business-specific properties
     business_type: Optional[str] = Field(default=None, max_length=100)
@@ -32,6 +49,19 @@ class FeatureBase(BaseModel):
     lane_count: Optional[int] = Field(default=None, ge=0)
     max_speed: Optional[int] = Field(default=None, ge=0)
     surface: Optional[str] = Field(default=None, max_length=50)
+
+    @field_validator("geometry")
+    @classmethod
+    def validate_geometry(cls, value):
+        validate_geometry_mapping(value)
+        return value
+
+    @model_validator(mode="after")
+    def validate_feature_geometry_type(self):
+        validate_feature_geometry(self.feature_type, self.geometry)
+        if self.building_id is not None and self.feature_type != "business":
+            raise ValueError("Only business features can link to a building")
+        return self
 
 
 class FeatureCreate(FeatureBase):
@@ -51,7 +81,7 @@ class FeatureUpdate(BaseModel):
     osm_id: Optional[str] = Field(default=None, max_length=50)
     osm_type: Optional[OsmType] = None
     source_kind: Optional[SourceKind] = None
-    feature_type: Optional[str] = Field(default=None, max_length=64)
+    feature_type: Optional[FeatureType] = None
     height_m: Optional[float] = Field(default=None, ge=0)
     business_type: Optional[str] = Field(default=None, max_length=100)
     building_id: Optional[int] = Field(default=None, ge=1)
@@ -61,6 +91,43 @@ class FeatureUpdate(BaseModel):
     max_speed: Optional[int] = Field(default=None, ge=0)
     surface: Optional[str] = Field(default=None, max_length=50)
 
+    @field_validator("geometry")
+    @classmethod
+    def validate_optional_geometry(cls, value):
+        if value is not None:
+            validate_geometry_mapping(value)
+        return value
+
+    @model_validator(mode="after")
+    def validate_supplied_geometry_type(self):
+        if self.geometry is not None and self.feature_type is not None:
+            validate_feature_geometry(self.feature_type, self.geometry)
+        if self.building_id is not None and self.feature_type not in (None, "business"):
+            raise ValueError("Only business features can link to a building")
+        return self
+
+
+class RoadSegmentUpdate(BaseModel):
+    start: list[float] = Field(min_length=2, max_length=2)
+    end: list[float] = Field(min_length=2, max_length=2)
+    feature: FeatureUpdate
+
+    _validate_start = field_validator("start")(_coordinate)
+    _validate_end = field_validator("end")(_coordinate)
+
+
+class RoadSegmentDelete(BaseModel):
+    start: list[float] = Field(min_length=2, max_length=2)
+    end: list[float] = Field(min_length=2, max_length=2)
+
+    _validate_start = field_validator("start")(_coordinate)
+    _validate_end = field_validator("end")(_coordinate)
+
+
+class RoadSegmentRestore(BaseModel):
+    feature: FeatureCreate
+    sibling_ids: list[int] = Field(default_factory=list)
+
 
 class FeatureResponse(FeatureBase):
     model_config = ConfigDict(from_attributes=True)
@@ -68,6 +135,11 @@ class FeatureResponse(FeatureBase):
     id: int
     created_at: datetime
     updated_at: datetime
+
+
+class RoadSegmentMutationResponse(BaseModel):
+    feature: FeatureResponse
+    sibling_ids: list[int]
 
 
 class GeoJSONFeature(BaseModel):

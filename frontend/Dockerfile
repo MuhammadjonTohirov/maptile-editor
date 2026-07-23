@@ -4,6 +4,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY frontend ./frontend
+COPY scripts/build-frontend.mjs ./scripts/build-frontend.mjs
 RUN npm run build
 
 FROM nginx:1.27-alpine

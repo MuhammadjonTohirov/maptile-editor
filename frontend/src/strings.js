@@ -1,11 +1,12 @@
 // Locale-aware string catalog (rule F7). Every user-visible string lives in
 // one catalog per language under locales/; English is the reference and the
-// fallback for any missing key.
-import en from './locales/en.js';
-import ru from './locales/ru.js';
-import uz from './locales/uz.js';
-
-export const LOCALES = { uz, ru, en };
+// fallback for any missing key. Only the active catalog (plus English when it
+// is needed as a fallback) is loaded into the page.
+const LOCALE_LOADERS = {
+  uz: () => import('./locales/uz.js'),
+  ru: () => import('./locales/ru.js'),
+  en: () => import('./locales/en.js'),
+};
 const STORAGE_KEY = 'maptile-locale';
 
 // localStorage throws in some private-browsing modes; the app must still run.
@@ -28,21 +29,27 @@ function rememberLocale(code) {
 // ?lang= override (also persisted) → saved choice → browser language → English.
 function resolveLocale() {
   const requested = new URLSearchParams(window.location.search).get('lang');
-  if (requested && Object.hasOwn(LOCALES, requested)) {
+  if (requested && Object.hasOwn(LOCALE_LOADERS, requested)) {
     rememberLocale(requested);
     return requested;
   }
   const saved = savedLocale();
-  if (saved && Object.hasOwn(LOCALES, saved)) return saved;
+  if (saved && Object.hasOwn(LOCALE_LOADERS, saved)) return saved;
   for (const language of navigator.languages ?? [navigator.language]) {
     const code = (language ?? '').slice(0, 2).toLowerCase();
-    if (Object.hasOwn(LOCALES, code)) return code;
+    if (Object.hasOwn(LOCALE_LOADERS, code)) return code;
   }
   return 'en';
 }
 
 const locale = resolveLocale();
 document.documentElement.lang = locale;
+const [selectedModule, englishModule] = await Promise.all([
+  LOCALE_LOADERS[locale](),
+  locale === 'en' ? Promise.resolve(null) : LOCALE_LOADERS.en(),
+]);
+const messages = selectedModule.default;
+const english = englishModule?.default || messages;
 
 export function currentLocale() {
   return locale;
@@ -52,7 +59,7 @@ export function currentLocale() {
 // in the new language. A stale ?lang= override is dropped so the saved
 // choice wins on the next load.
 export function setLocale(code) {
-  if (!Object.hasOwn(LOCALES, code) || code === locale) return;
+  if (!Object.hasOwn(LOCALE_LOADERS, code) || code === locale) return;
   rememberLocale(code);
   const url = new URL(window.location.href);
   url.searchParams.delete('lang');
@@ -60,7 +67,7 @@ export function setLocale(code) {
 }
 
 export function t(key, params = {}) {
-  let message = LOCALES[locale][key] ?? en[key] ?? key;
+  let message = messages[key] ?? english[key] ?? key;
   for (const [name, value] of Object.entries(params)) {
     message = message.replaceAll(`{${name}}`, String(value));
   }

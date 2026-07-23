@@ -17,6 +17,7 @@ PROPERTY_COLUMNS = (
     "road_type", "direction", "lane_count", "max_speed", "surface",
     "business_type", "building_id", "created_by", "updated_by",
 )
+AUDIT_COLUMNS = ("created_at", "updated_at")
 
 
 def geojson_query() -> Select:
@@ -27,6 +28,7 @@ def geojson_query() -> Select:
         Feature.id,
         Feature.properties,
         *(getattr(Feature, column) for column in PROPERTY_COLUMNS),
+        *(getattr(Feature, column) for column in AUDIT_COLUMNS),
         ST_AsGeoJSON(Feature.geometry).label("geometry_json"),
     )
 
@@ -34,6 +36,7 @@ def geojson_query() -> Select:
 def row_to_geojson(row) -> GeoJSONFeature:
     properties: Dict[str, Any] = dict(row.properties or {})
     properties.update({column: getattr(row, column) for column in PROPERTY_COLUMNS})
+    properties.update({column: getattr(row, column, None) for column in AUDIT_COLUMNS})
     # Drop nulls to keep the collection payload small.
     properties = {key: value for key, value in properties.items() if value is not None}
     geometry = json.loads(row.geometry_json) if row.geometry_json else None

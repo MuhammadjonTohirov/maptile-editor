@@ -11,7 +11,7 @@ from typing import Optional
 import bcrypt
 import jwt
 from fastapi import Cookie, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import (
@@ -87,6 +87,9 @@ async def ensure_bootstrap_admin() -> None:
     if not (BOOTSTRAP_ADMIN_USERNAME and BOOTSTRAP_ADMIN_PASSWORD):
         return
     async with async_session() as db:
+        await db.execute(text(
+            "SELECT pg_advisory_xact_lock(hashtext('maptile_bootstrap_admin'))"
+        ))
         if await db.scalar(select(func.count(User.id))):
             return
         db.add(User(

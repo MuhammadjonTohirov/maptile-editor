@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS base
 
 WORKDIR /app
 
@@ -12,10 +12,19 @@ RUN apt-get update \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
-
 EXPOSE 8000
 
 # The image default is production-safe; docker-compose adds --reload for
 # development (rule X4).
+FROM base AS production
+
+COPY *.py ./
+
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+FROM base AS test
+
+COPY . .
+RUN pip install --no-cache-dir -r requirements-dev.txt
+
+CMD ["pytest", "-q"]

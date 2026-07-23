@@ -1,6 +1,12 @@
-import maplibregl from 'maplibre-gl';
+import maplibregl from 'maplibre-gl/dist/maplibre-gl-csp.js';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { mapLibreLocale } from './strings.js';
+
+// Replaced at build time with the hashed, separately deployed MapLibre worker.
+// Keeping worker code out of the main runtime chunk prevents one monolithic
+// megabyte-scale download while preserving MapLibre's normal worker model.
+maplibregl.setWorkerUrl(MAPLIBRE_WORKER_URL);
+export { maplibregl };
 
 // One map bootstrap for the editor and the client (rule F1), so view
 // defaults and request handling can never drift apart.

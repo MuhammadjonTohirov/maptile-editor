@@ -20,37 +20,52 @@ commit with the reason.
 - **X4 — Deployment artifacts are reproducible.** Images build from pinned
   bases and lockfiles (`package-lock.json`, pinned `requirements.txt`).
   Production images carry no dev flags; dev conveniences (uvicorn `--reload`)
-  live in `docker-compose.yml` overrides only.
+  and source mounts live in `docker-compose.override.yml`. Production deploys
+  explicitly select only the base `docker-compose.yml`.
 - **X5 — Every proxy timeout covers its upstream.** If a backend operation can
   legitimately take N seconds (Overpass fallback chain), the nginx location
   that fronts it must allow more than N seconds.
 - **X6 — Checks are runnable and documented.** `npm run check:frontend`,
-  `npm run build`, backend `pytest`, `docker compose config`, and
+  `npm run build`, backend `pytest`, the isolated PostGIS suite
+  (`./scripts/test-backend-integration.sh`), `docker compose config`, and
   `./scripts/verify-stack.sh` must all pass before a change ships. README
   documents how.
+- **X7 — Source files stay reviewable.** Implementation files under
+  `backend/`, `frontend/src/`, and `scripts/` must not exceed 600 lines; new
+  work should target 500 lines or fewer. `scripts/check-source-size.mjs`
+  enforces the hard limit. Generated files, lockfiles, binary assets, and
+  declarative runtime artifacts such as the single MapLibre style JSON are
+  outside this implementation-file rule.
 
 ## Backend (FastAPI)
 
 - **B1 — Modules by responsibility.** `main.py` only assembles the app
-  (middleware, routers, lifespan, health). Feature CRUD lives in
-  `features_api.py`, OSM imports in `imports_api.py`, the Overpass client and
-  tag parsing in `overpass.py`, import orchestration in `osm_import.py`,
-  serialization in `serializers.py`, configuration in `config.py`.
+  (middleware, routers, lifespan, health). `features_api.py` is the thin HTTP
+  boundary; generic mutation transactions live in `feature_mutations.py`,
+  road-span transactions in `road_segment_service.py`, and pure feature
+  invariants in `feature_domain.py`. OSM imports live in `imports_api.py`, the
+  Overpass client and tag parsing in `overpass.py`, import orchestration in
+  `osm_import.py`, serialization in `serializers.py`, route-result assembly in
+  `route_result.py`, road-build ownership in `road_network_job.py`, and
+  configuration in `config.py`.
 - **B2 — No duplicated serialization.** Row → GeoJSON and ORM → response
   conversions exist exactly once (`serializers.py`). Column lists are defined
   once.
 - **B3 — Honest error semantics.** 404 for missing rows, 422 for invalid
-  input (bad geometry, bad bounds, bad enum), 409 for constraint conflicts,
-  502 for upstream (Overpass) failure, and unexpected exceptions surface as
-  500 — never converted to 400. `HTTPException` is never swallowed.
+  input (bad geometry, bad bounds, bad enum), 428 for a missing edit
+  precondition, 409 for a stale edit or constraint conflict, 502 for upstream
+  (Overpass) failure, and unexpected exceptions surface as 500 — never
+  converted to 400. `HTTPException` is never swallowed.
 - **B4 — Sessions roll back centrally.** The `get_db` dependency rolls back on
-  any exception; endpoints do not repeat try/rollback boilerplate and commit
-  explicitly on success.
-- **B5 — Validation at the boundary.** Pydantic schemas encode every
-  invariant the DB enforces (source_kind enum, name length, bounded import
-  areas, non-negative counts) so bad input fails with 422 before reaching
-  SQL. Partial updates use `model_dump(exclude_unset=True)`: absent means
-  "keep", null means "clear".
+  any exception. Mutation services own their complete transaction and commit
+  explicitly on success; routers do not repeat persistence orchestration.
+- **B5 — Validation at the boundary.** Pydantic schemas and
+  `feature_domain.py` encode every invariant the DB enforces (source kind,
+  feature type, geometry validity/type compatibility, name length, bounded
+  import areas, finite coordinates, non-negative counts) so bad input fails
+  with 422 before reaching SQL. A business link is also verified to reference
+  an actual building. Partial updates use `model_dump(exclude_unset=True)`:
+  absent means "keep", null means "clear".
 - **B6 — Batched queries.** No per-element SELECTs in loops. Imports prefetch
   existing rows with one `IN` query; counts use SQL, not row materialization.
 - **B7 — One import pipeline.** The four OSM import endpoints share a single
@@ -67,22 +82,36 @@ commit with the reason.
 - **B10 — Pure logic is unit-tested.** Parsing, validation, serialization,
   and element→feature building have pytest coverage that runs without a
   database (`backend/tests/`).
+- **B11 — Mutations reject stale state.** Every update, delete, and road-span
+  mutation carries the selected row's `updated_at` in `If-Match`, locks the row
+  with `FOR UPDATE`, and returns 409 if another transaction changed it. Blind
+  last-write-wins updates are not allowed.
+- **B12 — Background jobs have one database owner.** Bulk loads and route-graph
+  rebuilds use PostgreSQL advisory locks across processes. Their status is
+  durable in PostgreSQL, restart-interrupted states are repaired atomically,
+  and caught failures are logged as well as exposed to the admin UI.
+- **B13 — Readiness is real.** `/health` executes a database query and the
+  backend container healthcheck uses it. `/health/live` is process liveness.
+  Interactive routing and external downloads have explicit time limits.
 
 ## Database (PostGIS + migrations)
 
-- **D1 — Migrations are the only schema authority.** All schema — extension,
-  tables, indexes, triggers, constraints — is created by ordered idempotent
+- **D1 — Migrations are the stable schema authority.** Extensions and stable
+  tables, indexes, triggers, and constraints are created by ordered idempotent
   files in `db/migrations/`, applied exactly once by the `migrations` job
-  before backend and Martin start. There is no separate bootstrap path.
+  before backend and Martin start. The only runtime DDL is the routing
+  builder's disposable `*_build`, `*_next`, and `*_previous` shadow artifacts,
+  which are atomically swapped into the migrated stable graph tables.
 - **D2 — Migrations are idempotent and transactional.** Every file can run on
   a database at any prior state (`IF NOT EXISTS`, `CREATE OR REPLACE`,
   drop-then-add for constraints) and wraps its statements in a transaction.
 - **D3 — Applied migrations are immutable.** Never edit a migration recorded
   in `schema_migrations`; fix forward with a new file. Application startup
   code never alters schema.
-- **D4 — The DB enforces invariants the app relies on.** `source_kind` is
-  CHECK-constrained, OSM identity `(osm_type, osm_id)` is a partial unique
-  index, geometry has a GIST index, `updated_at` is trigger-maintained.
+- **D4 — The DB enforces invariants the app relies on.** `source_kind` and new
+  feature geometry/type combinations are CHECK-constrained, OSM identity
+  `(osm_type, osm_id)` is a partial unique index, geometry has a GIST index,
+  and `updated_at` is trigger-maintained.
 - **D5 — Types match end to end.** Timestamps are `timestamptz` in SQL and
   timezone-aware `DateTime(timezone=True)` in SQLAlchemy. Geometry is EPSG:4326
   everywhere; projection is the renderer's job.
@@ -92,14 +121,22 @@ commit with the reason.
 ## Frontend (editor and client)
 
 - **F1 — Modules by responsibility.** `main.js` holds only the `MapEditor`
-  orchestration. HTTP access lives in `api.js`, geometry math in
-  `geometry.js`, layer-id lists and visibility helpers in `layers.js`,
-  map construction in `map-setup.js`, user-visible strings in `strings.js`,
-  route interaction in `route-ui.js`, rebuild polling in `road-network-ui.js`,
-  road draft/snapping rules in `road-editing.js`, controlled road form options
-  and class-based speed defaults in `road-options.js`, emoji/label anchors in
-  `emoji-icons.js`, and basemap masking in `base-masks.js`. The client
-  (`client.js`) reuses these modules; it never redefines them.
+  composition and cross-controller refresh state. Map/drawing events live in
+  `editor-interactions.js`, selection and draft sessions in
+  `feature-editor.js`, and persisted mutations in `feature-actions.js`. HTTP
+  access lives in `api.js`, geometry math in `geometry.js`, layer-id lists and
+  visibility helpers in `layers.js`, map construction in `map-setup.js`,
+  user-visible strings in `strings.js`, route interaction in `route-ui.js`,
+  rebuild polling in `road-network-ui.js`, road draft/snapping rules in
+  `road-editing.js`, controlled road form options and class-based speed
+  defaults in `road-options.js`, feature form/payload handling in
+  `feature-form.js`, feature reads and viewport freshness in `editor-data.js`,
+  search in `feature-search.js`, import controls in `osm-import-ui.js`,
+  inverse-operation history in `undo-stack.js`, road endpoint feedback/index
+  state in `road-connectivity-ui.js`, live snap targeting and its indicator in
+  `snapping-ui.js`, emoji/label anchors in `emoji-icons.js`, and basemap
+  masking in `base-masks.js`. The client (`client.js`) reuses these modules; it
+  never redefines them.
 - **F2 — One API client.** All requests go through `api.js`, which raises
   `ApiError` with the HTTP status and the server's `detail` message. Callers
   branch on `error.status` (e.g. 404 → refresh ghost features), never on
@@ -150,3 +187,7 @@ commit with the reason.
   only `{serverId, mode}`; payloads for an existing feature are built from
   the authoritative selected properties so a reshape or drag can never reset
   `source_kind`, the OSM identity, or the `base_*` masking linkage.
+- **F12 — Editor writes carry a version.** `api.js` attaches the selected
+  feature's `updated_at` as `If-Match` to every update/delete/restore request.
+  A 409 `feature_changed` response is shown as a reselect-before-saving
+  message; the client never retries a stale mutation silently.

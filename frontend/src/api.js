@@ -13,6 +13,12 @@ export function isMissing(error) {
   return error instanceof ApiError && error.status === 404;
 }
 
+export function isStaleEdit(error) {
+  return error instanceof ApiError
+    && error.status === 409
+    && error.message === 'feature_changed';
+}
+
 async function errorDetail(response) {
   try {
     const payload = await response.json();
@@ -25,10 +31,20 @@ async function errorDetail(response) {
   return response.statusText || `HTTP ${response.status}`;
 }
 
-async function request(path, { method = 'GET', body } = {}) {
+function versionHeaders(updatedAt) {
+  if (!updatedAt) {
+    throw new Error('A feature version is required for this mutation');
+  }
+  return { 'If-Match': `"${updatedAt}"` };
+}
+
+async function request(path, { method = 'GET', body, headers = {} } = {}) {
   const response = await fetch(path, {
     method,
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    headers: {
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...headers,
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!response.ok) {
@@ -51,13 +67,55 @@ export const featuresApi = {
   listInBounds: (bbox, limit) => request(`/api/features?bbox=${bbox}&limit=${limit}`),
   get: (id) => request(`/api/features/${id}`),
   create: (payload) => request('/api/features', { method: 'POST', body: payload }),
-  update: (id, payload, { confirmPublished = false } = {}) => request(
+  update: (
+    id,
+    payload,
+    { confirmPublished = false, expectedUpdatedAt } = {},
+  ) => request(
     `/api/features/${id}${confirmPublished ? '?confirm_published=true' : ''}`,
-    { method: 'PUT', body: payload },
+    {
+      method: 'PUT',
+      body: payload,
+      headers: versionHeaders(expectedUpdatedAt),
+    },
   ),
-  remove: (id, { confirmPublished = false } = {}) => request(
+  updateRoadSegment: (id, payload, { expectedUpdatedAt } = {}) => request(
+    `/api/features/${id}/road-segment`,
+    {
+      method: 'PUT',
+      body: payload,
+      headers: versionHeaders(expectedUpdatedAt),
+    },
+  ),
+  deleteRoadSegment: (
+    id,
+    payload,
+    { confirmPublished = false, expectedUpdatedAt } = {},
+  ) => request(
+    `/api/features/${id}/road-segment/delete${confirmPublished ? '?confirm_published=true' : ''}`,
+    {
+      method: 'POST',
+      body: payload,
+      headers: versionHeaders(expectedUpdatedAt),
+    },
+  ),
+  restoreRoadSegment: (id, payload, { expectedUpdatedAt } = {}) => request(
+    `/api/features/${id}/road-segment/restore`,
+    {
+      method: 'POST',
+      body: payload,
+      headers: versionHeaders(expectedUpdatedAt),
+    },
+  ),
+  remove: (
+    id,
+    { confirmPublished = false, expectedUpdatedAt } = {},
+  ) => request(
     `/api/features/${id}${confirmPublished ? '?confirm_published=true' : ''}`,
-    { method: 'DELETE' },
+    {
+      method: 'DELETE',
+      headers: versionHeaders(expectedUpdatedAt),
+    },
   ),
   clearAll: () => request('/api/features/clear-all', { method: 'DELETE' }),
   importOsm: (kind, bounds) => request(`/api/load-osm-${kind}`, { method: 'POST', body: bounds }),

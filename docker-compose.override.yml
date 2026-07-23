@@ -1,0 +1,9 @@
+services:
+  backend:
+    # Local development only. Production deploys explicitly use the base
+    # Compose file, whose immutable image runs the Dockerfile's normal command.
+    build:
+      target: test
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./backend:/app

@@ -20,13 +20,13 @@ async def bulk_load_countries(_: User = Depends(require_admin)):
 
 @router.get("/bulk-load/status")
 async def bulk_load_status(_: User = Depends(require_admin)):
-    return bulk_load.status()
+    return await bulk_load.status()
 
 
 @router.post("/bulk-load")
 async def bulk_load_start(payload: BulkLoadRequest, _: User = Depends(require_admin)):
     try:
-        bulk_load.start(payload.country)
+        await bulk_load.start(payload.country)
     except KeyError as error:
         raise HTTPException(status_code=422, detail="Unknown country") from error
     except RuntimeError as error:

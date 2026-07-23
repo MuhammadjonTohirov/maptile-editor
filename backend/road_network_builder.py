@@ -12,6 +12,7 @@ available to route queries throughout a later rebuild.
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextlib import suppress
 from typing import Any
 
@@ -19,6 +20,12 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import async_session
+from road_network_job import NOW as _NOW
+from road_network_job import start as start_job
+from road_network_job import status, update_state as _update_state
+
+
+logger = logging.getLogger(__name__)
 
 ROAD_BATCH_SIZE = 5_000
 SEGMENT_BATCH_SIZE = 100_000
@@ -31,16 +38,6 @@ MANUAL_JUNCTION_SEARCH_DEGREES = 0.00015
 # host line. Snap the host to that blade before splitting so the shared point
 # becomes an actual graph vertex instead of merely lying on an edge.
 MANUAL_JUNCTION_SPLIT_TOLERANCE_DEGREES = 1e-9
-
-_STATE_FIELDS = {
-    "status", "phase", "progress", "roads_total", "roads_processed",
-    "segments_total", "segments_processed", "vertices_count", "edge_count",
-    "started_at", "finished_at", "error", "build_source_revision",
-}
-_NOW = object()
-
-_task: asyncio.Task[None] | None = None
-_start_lock = asyncio.Lock()
 
 _INSERT_MANUAL_JUNCTIONS = text("""
 WITH manual_endpoints AS (
@@ -77,42 +74,6 @@ SELECT source_feature_id, endpoint_index, target_feature_id, geom
 FROM nearest
 WHERE distance_m <= :tolerance_m
 """)
-
-
-def _task_running() -> bool:
-    return _task is not None and not _task.done()
-
-
-async def status(db: AsyncSession) -> dict[str, Any]:
-    row = (await db.execute(text(
-        "SELECT status, phase, progress, roads_total, roads_processed, "
-        "segments_total, segments_processed, vertices_count, edge_count, "
-        "published_at, started_at, finished_at, updated_at, error, "
-        "is_stale, source_revision, published_revision, build_source_revision, source_changed_at "
-        "FROM road_network_build_state WHERE id = 1"
-    ))).mappings().one()
-    result = dict(row)
-    # An in-process task cannot survive a backend restart. Report that state
-    # honestly instead of leaving the UI polling a permanently "running" row.
-    if result["status"] == "running" and not _task_running():
-        result["status"] = "error"
-        result["error"] = "Road network rebuild was interrupted by a backend restart."
-    return result
-
-
-async def _update_state(**fields: Any) -> None:
-    if not fields or not set(fields).issubset(_STATE_FIELDS):
-        raise ValueError("invalid road network build state update")
-    assignments = ", ".join(
-        f"{name} = now()" if value is _NOW else f"{name} = :{name}"
-        for name, value in fields.items()
-    )
-    parameters = {name: value for name, value in fields.items() if value is not _NOW}
-    async with async_session() as db:
-        await db.execute(text(
-            f"UPDATE road_network_build_state SET {assignments}, updated_at = now() WHERE id = 1"
-        ), parameters)
-        await db.commit()
 
 
 async def _prepare_manual_junctions(db: AsyncSession) -> None:
@@ -514,21 +475,11 @@ async def _run_job() -> None:
             )
         raise
     except Exception as error:  # noqa: BLE001 — surfaced to the admin UI
+        logger.exception("Road network rebuild failed")
         await _update_state(
             status="error", phase="error", finished_at=_NOW, error=str(error),
         )
 
 
 async def start() -> None:
-    """Begin one rebuild in the background."""
-    global _task
-    async with _start_lock:
-        if _task_running():
-            raise RuntimeError("a road network rebuild is already running")
-        await _update_state(
-            status="running", phase="segments", progress=0,
-            roads_total=0, roads_processed=0, segments_total=0,
-            segments_processed=0, vertices_count=0, edge_count=None,
-            started_at=_NOW, finished_at=None, error=None,
-        )
-        _task = asyncio.create_task(_run_job())
+    await start_job(_run_job)

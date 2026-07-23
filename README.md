@@ -78,6 +78,13 @@ profile and routed from that fractional edge position, not from a distant graph
 node. The returned line retains the exact clicked A/B coordinates with short
 access legs, so a route requested from inside a building visibly connects to
 the road network before following it.
+Walking routes use a dashed line, bicycle and car routes use distinct profile
+styles, and the exact endpoints are labelled A/B. The route Details dialog
+shows localized distance, ETA, and named turn steps, falling back to the turn
+coordinate when the source road has no name. While a road is selected for
+geometry editing, one-way arrows and the available junction turn directions
+are drawn over the road; bidirectional roads intentionally have no direction
+arrows.
 
 The builder follows OSM's topology model: consecutive nodes in each road way
 become directed graph edges, and equal OSM node coordinates become shared graph
@@ -105,6 +112,14 @@ The browser accesses vectors only through the frontend origin:
 
 - `/tiles/base/{z}/{x}/{y}` — immutable OpenMapTiles-compatible OSM base
 - `/tiles/editor/{z}/{x}/{y}` — dynamic editor overlay, reloaded after edits
+
+The production frontend build compiles the editor and public client together
+with ESM code splitting. Their shared MapLibre runtime, MapLibre worker, and
+locale catalogs are emitted as separate hashed chunks. This keeps the editor's
+`app.js` entry small, loads only the active locale, and allows both pages to
+reuse the same browser-cached map code. Production source maps are intentionally
+excluded from the deployed assets; source modules remain available in the
+repository for debugging.
 
 Rendered tile geometry is clipped per tile and quantized, so selecting a
 feature always reloads its authoritative geometry from `/api/features/{id}`
@@ -164,23 +179,34 @@ npm run check:frontend   # syntax checks, style-spec validation, layer-id audit
 npm run build
 docker compose config
 docker compose exec backend python -m pytest tests -q   # backend unit tests
+./scripts/test-backend-integration.sh                    # isolated PostGIS/API tests
 ```
 
 After the archive has been built and the stack is running, verify its public
 routes with `./scripts/verify-stack.sh`.
 
-The backend is small, flat modules by responsibility: `main.py` assembles the
-app; `features_api.py` and `imports_api.py` hold the routes; `osm_import.py`
-is the shared import pipeline; `overpass.py` talks to Overpass and parses OSM
-tags; `serializers.py` converts rows to API shapes; `config.py` reads the
-environment. The frontend mirrors that: `main.js` orchestrates the editor
+Local Compose commands automatically apply `docker-compose.override.yml`,
+which bind-mounts backend source and enables Uvicorn reload. VPS deployment
+explicitly uses only `docker-compose.yml`, so it runs the immutable production
+image without development flags or a source-code mount.
+
+The backend uses small modules by responsibility: `main.py` assembles the app;
+`features_api.py` is the thin HTTP boundary; `feature_mutations.py` and
+`road_segment_service.py` own concurrency-safe transactions;
+`feature_domain.py` owns pure invariants; `imports_api.py` owns import routes;
+`osm_import.py` is the shared import pipeline; `overpass.py` talks to Overpass
+and parses OSM tags; `serializers.py` converts rows to API shapes; and
+`road_network_job.py` owns durable rebuild coordination. The frontend mirrors
+that separation: `main.js` orchestrates the editor
 using `api.js`, `geometry.js`, `layers.js`, `map-setup.js`, `strings.js`,
 `base-masks.js`, and `emoji-icons.js`; `client.js` reuses the same modules.
 
-Database schema comes exclusively from the idempotent SQL files in
-`db/migrations/` (starting at `000_baseline.sql`). The Compose `migrations`
-job applies each one exactly once before the backend and Martin start — a
-fresh database needs nothing else. Existing database data is retained.
+Stable database schema comes exclusively from the idempotent SQL files in
+`db/migrations/` (starting at `000_baseline.sql`). The routing builder creates
+only disposable shadow tables while rebuilding and atomically swaps them into
+the migrated graph tables. The Compose `migrations` job applies each migration
+exactly once before the backend and Martin start. Existing database data is
+retained.
 
 PostGIS uses host port `5434` by default to avoid colliding with other local
 projects; containers continue to use `db:5432`. Set `POSTGRES_HOST_PORT` to

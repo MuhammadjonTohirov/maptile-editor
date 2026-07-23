@@ -14,6 +14,15 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import road_network_builder
+from config import ROUTE_STATEMENT_TIMEOUT_MS
+from route_result import (
+    append_coordinate,
+    append_linestring,
+    finish_at_coordinate,
+    route_steps_for,
+    route_traversals,
+    turn_maneuver,
+)
 
 
 @dataclass(frozen=True)
@@ -42,7 +51,9 @@ class RoutePoint:
 # instead of pretending that a car can drive through a building or courtyard.
 ACCESS_LEG_SPEED_MPS = 5000 / 3600
 
-CAR_SPEED_KPH_SQL = """GREATEST(COALESCE(max_speed, CASE road_type
+
+def _car_speed_kph_sql(column_prefix: str = "") -> str:
+    return f"""GREATEST(COALESCE({column_prefix}max_speed, CASE {column_prefix}road_type
     WHEN 'motorway' THEN 90 WHEN 'motorway_link' THEN 50
     WHEN 'trunk' THEN 80 WHEN 'trunk_link' THEN 45
     WHEN 'primary' THEN 60 WHEN 'primary_link' THEN 40
@@ -51,6 +62,9 @@ CAR_SPEED_KPH_SQL = """GREATEST(COALESCE(max_speed, CASE road_type
     WHEN 'residential' THEN 30 WHEN 'unclassified' THEN 30
     WHEN 'living_street' THEN 10 WHEN 'service' THEN 20
     WHEN 'track' THEN 10 ELSE 30 END), 5)"""
+
+
+CAR_SPEED_KPH_SQL = _car_speed_kph_sql()
 
 # Cost is travel time multiplied by road preference. Physical duration is
 # calculated separately after Dijkstra, so preferring an arterial does not
@@ -71,6 +85,14 @@ CAR_COST_SQL = f"""(ST_Length(geom::geography) /
 
 CAR_TRAVEL_TIME_SQL = (
     f"ST_Length(geom::geography) / ({CAR_SPEED_KPH_SQL} * 1000.0 / 3600.0)"
+)
+
+# Route reconstruction also joins the source feature to retrieve its display
+# name. Qualify every segment column there because features intentionally
+# carries similarly named road attributes such as max_speed.
+CAR_SEGMENT_TRAVEL_TIME_SQL = (
+    "ST_Length(segments.geom::geography) / "
+    f"({_car_speed_kph_sql('segments.')} * 1000.0 / 3600.0)"
 )
 
 # Per-profile road accessibility + cost. car respects the digitized oneway
@@ -194,53 +216,6 @@ def points_sql_for(start: RoutePoint, end: RoutePoint) -> str:
     )
 
 
-def _route_steps(rows: list[Any]) -> list[dict[str, int]]:
-    """Attach each traversed edge to the node reached after that edge."""
-    steps = []
-    for index, row in enumerate(rows[:-1]):
-        if row.edge == -1:
-            continue
-        steps.append({
-            "path_seq": int(row.path_seq),
-            "node": int(row.node),
-            "next_node": int(rows[index + 1].node),
-            "edge": int(row.edge),
-        })
-    return steps
-
-
-def _append_coordinate(coordinates: list[list[float]], coordinate: list[float]) -> None:
-    point = [float(coordinate[0]), float(coordinate[1])]
-    # Edge geometries are stored at nine-decimal precision while
-    # ST_ClosestPoint can retain extra floating-point digits. Treat sub-mm
-    # representation noise as the same join so the GeoJSON has no microscopic
-    # duplicate legs.
-    if not coordinates or any(
-        abs(previous - current) > 1e-9
-        for previous, current in zip(coordinates[-1], point)
-    ):
-        coordinates.append(point)
-
-
-def _append_linestring(coordinates: list[list[float]], geometry: dict[str, Any]) -> None:
-    if geometry.get("type") != "LineString":
-        raise ValueError("route segment is not a LineString")
-    for coordinate in geometry.get("coordinates", []):
-        _append_coordinate(coordinates, coordinate)
-
-
-def _finish_at_coordinate(coordinates: list[list[float]], coordinate: list[float]) -> None:
-    """End at the caller's coordinate exactly, even across rounding noise."""
-    point = [float(coordinate[0]), float(coordinate[1])]
-    if coordinates and coordinates[-1] != point and all(
-        abs(previous - current) <= 1e-9
-        for previous, current in zip(coordinates[-1], point)
-    ):
-        coordinates[-1] = point
-    else:
-        _append_coordinate(coordinates, point)
-
-
 def edges_sql_for(
     profile: str,
     bounds: tuple[float, float, float, float] | None = None,
@@ -288,6 +263,9 @@ def _route_bounds(
 async def find_route(
     db: AsyncSession, from_lng: float, from_lat: float, to_lng: float, to_lat: float, profile: str,
 ) -> Optional[dict[str, Any]]:
+    await db.execute(text(
+        f"SET LOCAL statement_timeout = {ROUTE_STATEMENT_TIMEOUT_MS}"
+    ))
     spec = PROFILES[profile]
 
     start = await _nearest_edge_point(db, from_lng, from_lat, profile, pid=1)
@@ -327,7 +305,7 @@ async def find_route(
         if any(row.edge != -1 for row in rows):
             break
 
-    route_steps = _route_steps(rows)
+    route_steps = route_traversals(rows)
     if not route_steps:
         return None
 
@@ -341,7 +319,7 @@ async def find_route(
         "SELECT * FROM jsonb_to_recordset(CAST(:steps_json AS jsonb)) "
         "AS step(path_seq bigint, node bigint, next_node bigint, edge bigint)"
         "), fractions AS ("
-        "SELECT step.path_seq, edge.road_type, edge.max_speed, edge.geom, "
+        "SELECT step.path_seq, edge.feature_id, edge.road_type, edge.max_speed, edge.geom, "
         "CASE WHEN step.node = :from_vid THEN :from_fraction "
         "WHEN step.node = :to_vid THEN :to_fraction "
         "WHEN step.node = edge.source THEN 0.0 "
@@ -352,17 +330,20 @@ async def find_route(
         "WHEN step.next_node = edge.target THEN 1.0 END AS end_fraction "
         "FROM route_steps step JOIN road_network_edges edge ON edge.id = step.edge"
         "), segments AS ("
-        "SELECT path_seq, road_type, max_speed, "
+        "SELECT path_seq, feature_id, road_type, max_speed, "
         "CASE WHEN start_fraction IS NULL OR end_fraction IS NULL "
         "OR abs(start_fraction - end_fraction) <= 1e-15 THEN NULL "
         "WHEN start_fraction < end_fraction "
         "THEN ST_LineSubstring(geom, start_fraction, end_fraction) "
         "ELSE ST_Reverse(ST_LineSubstring(geom, end_fraction, start_fraction)) END AS geom "
         "FROM fractions"
-        ") SELECT path_seq, ST_AsGeoJSON(geom) AS geojson, "
-        "ST_Length(geom::geography) AS distance_m, "
-        f"{CAR_TRAVEL_TIME_SQL} AS car_duration_s "
-        "FROM segments WHERE geom IS NOT NULL ORDER BY path_seq"
+        ") SELECT segments.path_seq, segments.feature_id, "
+        "NULLIF(BTRIM(feature.name), '') AS road_name, "
+        "ST_AsGeoJSON(segments.geom) AS geojson, "
+        "ST_Length(segments.geom::geography) AS distance_m, "
+        f"{CAR_SEGMENT_TRAVEL_TIME_SQL} AS car_duration_s "
+        "FROM segments LEFT JOIN features feature ON feature.id = segments.feature_id "
+        "WHERE segments.geom IS NOT NULL ORDER BY segments.path_seq"
     ), {
         "steps_json": json.dumps(route_steps),
         "from_vid": start.vid,
@@ -372,15 +353,23 @@ async def find_route(
     })).all()
 
     coordinates: list[list[float]] = [[float(from_lng), float(from_lat)]]
-    _append_coordinate(coordinates, [start.snapped_lng, start.snapped_lat])
+    append_coordinate(coordinates, [start.snapped_lng, start.snapped_lat])
     network_distance_m = 0.0
     car_duration_s = 0.0
+    route_segments = []
     for row in segment_rows:
-        _append_linestring(coordinates, json.loads(row.geojson))
+        segment_geometry = json.loads(row.geojson)
+        append_linestring(coordinates, segment_geometry)
         network_distance_m += float(row.distance_m)
         car_duration_s += float(row.car_duration_s)
-    _append_coordinate(coordinates, [end.snapped_lng, end.snapped_lat])
-    _finish_at_coordinate(coordinates, [float(to_lng), float(to_lat)])
+        route_segments.append({
+            "feature_id": int(row.feature_id),
+            "road_name": row.road_name,
+            "coordinates": segment_geometry["coordinates"],
+            "distance_m": float(row.distance_m),
+        })
+    append_coordinate(coordinates, [end.snapped_lng, end.snapped_lat])
+    finish_at_coordinate(coordinates, [float(to_lng), float(to_lat)])
 
     if len(coordinates) < 2:
         return None
@@ -398,4 +387,11 @@ async def find_route(
         "geometry": {"type": "LineString", "coordinates": coordinates},
         "distance_m": distance_m,
         "duration_s": duration_s,
+        "steps": route_steps_for(
+            route_segments,
+            [from_lng, from_lat],
+            [to_lng, to_lat],
+            start.access_m,
+            end.access_m,
+        ),
     }

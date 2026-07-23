@@ -5,6 +5,7 @@ road_network.py).
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import road_network
@@ -45,7 +46,22 @@ async def get_route(
     network_state = await road_network.network_state(db)
     if not network_state["ready"]:
         raise HTTPException(status_code=409, detail="Road network has not been built yet")
-    route = await road_network.find_route(db, from_lng, from_lat, to_lng, to_lat, profile)
+    try:
+        route = await road_network.find_route(
+            db,
+            from_lng,
+            from_lat,
+            to_lng,
+            to_lat,
+            profile,
+        )
+    except DBAPIError as error:
+        if "statement timeout" not in str(error).lower():
+            raise
+        raise HTTPException(
+            status_code=504,
+            detail="Route calculation exceeded the server time limit",
+        ) from error
     if route is None:
         raise HTTPException(status_code=404, detail="No route found")
     route["network_stale"] = network_state["is_stale"]

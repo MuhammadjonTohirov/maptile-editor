@@ -63,17 +63,18 @@
       <section class="control-section">
         <details open>
           <summary><h2 data-i18n="sectionRoute">Find route</h2></summary>
-          <div class="control-section-content">
-            <div class="button-grid">
+          <div class="control-section-content route-controls">
+            <div class="button-grid route-profile-grid">
               <button id="route-profile-foot" type="button" class="active" data-i18n="routeProfileFoot">Walking</button>
               <button id="route-profile-bicycle" type="button" data-i18n="routeProfileBicycle">Bicycle</button>
               <button id="route-profile-car" type="button" data-i18n="routeProfileCar">Car</button>
             </div>
-            <div class="button-grid">
+            <div class="button-grid route-action-grid">
               <button id="find-route" type="button" data-i18n="findRoute">Find route</button>
               <button id="clear-route" type="button" disabled data-i18n="clearRoute">Clear route</button>
+              <button id="route-details" type="button" disabled data-i18n="routeDetails">Details</button>
             </div>
-            <p id="route-status" class="form-hint"></p>
+            <p id="route-status" class="form-hint route-status"></p>
             <p id="road-network-state" class="network-state" data-state="stale" data-i18n="roadNetworkStateMissing">Road network has not been built.</p>
           </div>
         </details>
@@ -220,6 +221,7 @@
         <label id="max-speed-field"><span data-i18n="labelMaxSpeed">Max speed (km/h)</span><input id="max-speed" type="number" min="1" max="200" step="1" autocomplete="off"></label>
       </div>
       <label><span data-i18n="labelSurface">Surface</span><select id="road-surface"></select></label>
+      <p class="form-hint road-bend-hint" data-i18n="roadBendHint">Hold Alt/Option and drag any point on the selected road to bend it.</p>
       <p id="road-connectivity-hint" class="form-hint"></p>
     </div>
     <p class="form-hint" data-i18n="formHint">Road geometry stays as a draft until you save; Cancel or Escape restores the published feature.</p>
@@ -283,6 +285,21 @@
       </div>
       <p id="bulk-load-error" class="auth-error" role="alert"></p>
       <button id="bulk-load-start" class="primary" type="button" data-i18n="bulkLoadStart">Start bulk load</button>
+    </div>
+  </div>
+
+  <div id="route-details-modal" class="auth-overlay" hidden>
+    <div class="auth-card route-details-card" role="dialog" aria-modal="true" aria-labelledby="route-details-title">
+      <div class="panel-heading inline-heading">
+        <h2 id="route-details-title" data-i18n="routeDetailsTitle">Route details</h2>
+        <button id="route-details-close" class="icon-button" type="button" aria-label="Close" data-i18n-aria-label="closeProperties">×</button>
+      </div>
+      <p id="route-details-summary" class="route-details-summary"></p>
+      <details class="route-json-output" open>
+        <summary data-i18n="routeJsonOutput">Route JSON output</summary>
+        <pre id="route-details-json"></pre>
+      </details>
+      <ol id="route-details-list" class="route-steps"></ol>
     </div>
   </div>
 

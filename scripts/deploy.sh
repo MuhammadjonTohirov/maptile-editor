@@ -81,14 +81,16 @@ if [ ! -f tiles/osm_uzbekistan.mbtiles ]; then
   ./scripts/build-uzbekistan-tiles.sh
 fi
 
-# Build images (frontend bundles its own JS), run migrations, start everything.
-docker compose $PROFILE up -d --build
+# Build immutable production images, run migrations, and start everything.
+# Supplying the base file explicitly excludes docker-compose.override.yml,
+# which contains local source mounts and uvicorn auto-reload.
+docker compose -f docker-compose.yml $PROFILE up -d --build
 
 # Health-check the backend directly on loopback (:8000, un-prefixed routes) so
 # the probe is the same whether the front door is the frontend or Caddy.
 echo "  waiting for the stack to come up…"
 for _ in $(seq 1 40); do
-  curl -sf http://127.0.0.1:8000/meta >/dev/null 2>&1 && break
+  curl -sf http://127.0.0.1:8000/health >/dev/null 2>&1 && break
   sleep 3
 done
 
@@ -103,7 +105,7 @@ else
   echo "  $COUNT features already loaded — skipping the OSM bulk load."
 fi
 
-docker compose $PROFILE ps
+docker compose -f docker-compose.yml $PROFILE ps
 REMOTE
 
 echo

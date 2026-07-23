@@ -6,6 +6,17 @@ function cloneGeometry(geometry) {
   return geometry ? structuredClone(geometry) : null;
 }
 
+export function resolveSelectedGeometry(
+  drawFeatures,
+  serverId,
+  stagedGeometry = null,
+  storedGeometry = null,
+) {
+  const liveFeature = (drawFeatures || []).find((feature) =>
+    String(feature.properties?.serverId) === String(serverId));
+  return cloneGeometry(liveFeature?.geometry || stagedGeometry || storedGeometry);
+}
+
 export function validateRoadLineString(geometry) {
   if (geometry?.type !== 'LineString' || !Array.isArray(geometry.coordinates)) {
     return { valid: false, reason: 'roadGeometryLineString' };

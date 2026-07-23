@@ -36,6 +36,7 @@ h2 { font-size: 14px; }
 .edit-state[hidden] { display: none; }
 body.road-drawing .controls { border-color: #5aa2f2; box-shadow: 0 0 0 3px rgb(9 105 218 / 15%), 0 16px 40px rgb(18 32 55 / 18%); }
 body.road-editing .feature-panel { border-color: #e59432; box-shadow: 0 0 0 3px rgb(229 148 50 / 16%), 0 16px 40px rgb(18 32 55 / 18%); }
+.maplibregl-canvas.road-bending-active { cursor: grabbing !important; }
 
 .control-section { border-top: 1px solid #dce4ec; }
 .control-section summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; border-radius: 7px; list-style: none; cursor: pointer; user-select: none; }
@@ -47,6 +48,11 @@ body.road-editing .feature-panel { border-color: #e59432; box-shadow: 0 0 0 3px 
 .control-section summary h2 { margin: 0; }
 .control-section-content { padding: 0 0 13px; }
 .button-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.route-controls { display: grid; gap: 10px; }
+.route-profile-grid > :last-child, .route-action-grid > :last-child { grid-column: 1 / -1; }
+.route-status { min-height: 17px; margin: 0; }
+.route-status:empty { display: none; }
+.route-controls .network-state { margin: 0; }
 .road-draw-setup { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 9px; margin-top: 9px; color: #405168; font-size: 12px; font-weight: 650; }
 .road-draw-setup select { min-width: 0; padding: 6px 8px; }
 button { min-height: 34px; border: 1px solid #cbd6e2; border-radius: 8px; padding: 7px 9px; background: #fff; color: #1d2b3c; cursor: pointer; font: inherit; font-size: 12px; font-weight: 650; }
@@ -70,6 +76,7 @@ footer strong { color: #172033; }
 .feature-panel label { display: grid; gap: 5px; margin: 12px 0; color: #405168; font-size: 12px; font-weight: 650; }
 .feature-meta, .form-hint { margin: -4px 0 10px; color: #64748b; font-size: 12px; line-height: 1.4; }
 .form-hint { margin: 14px 0 10px; }
+.road-bend-hint { color: #9a5b12; font-weight: 650; }
 .property-group { border-top: 1px solid #e1e8f0; margin-top: 12px; padding-top: 1px; }
 .field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .field-pair label { min-width: 0; }
@@ -108,6 +115,19 @@ textarea { resize: vertical; }
 .auth-error { min-height: 16px; margin: 6px 0 0; color: #b42318; font-size: 12px; font-weight: 600; }
 .auth-viewer-link { margin: 14px 0 0; text-align: center; font-size: 12px; }
 .auth-viewer-link a { color: #0969da; }
+.route-details-card { display: flex; flex-direction: column; width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); }
+.route-details-summary { margin: 0 0 14px; border-radius: 9px; padding: 10px 12px; background: #eef6ff; color: #1f4f85; font-size: 13px; font-weight: 750; }
+.route-json-output { flex: 0 0 auto; margin: 0 0 12px; border: 1px solid #dbe3ec; border-radius: 9px; background: #f8fafc; }
+.route-json-output summary { cursor: pointer; padding: 9px 11px; color: #405168; font-size: 12px; font-weight: 750; }
+.route-json-output pre { max-height: min(280px, 35dvh); margin: 0; border-top: 1px solid #dbe3ec; padding: 10px 11px; overflow: auto; color: #24364b; font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: pre; }
+.route-steps { min-height: 0; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.route-step { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 62px; border-top: 1px solid #e3eaf1; padding: 9px 3px; }
+.route-step:first-child { border-top: 0; }
+.route-step-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #e8f2ff; color: #0969da; font-size: 20px; font-weight: 800; }
+.route-step-content { display: grid; min-width: 0; gap: 3px; }
+.route-step-content strong { color: #172033; font-size: 13px; }
+.route-step-content span { overflow: hidden; color: #65758a; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.route-step-distance { color: #52657c; font-size: 11px; font-weight: 700; white-space: nowrap; }
 .user-chip { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 0 4px; font-size: 12px; color: #405168; }
 .user-chip[hidden] { display: none; }
 .user-chip-actions { display: flex; gap: 6px; }

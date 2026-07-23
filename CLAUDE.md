@@ -65,19 +65,31 @@ PostGIS (host :5434; internal :5432)
 ## Code layout
 
 - Backend (flat modules, one responsibility each): `main.py` assembles the
-  app; `features_api.py` (CRUD routes), `imports_api.py` (import routes),
+  app; `features_api.py` is the thin feature HTTP boundary,
+  `feature_mutations.py` owns concurrency-safe feature transactions,
+  `road_segment_service.py` owns span transactions, `feature_domain.py` owns
+  pure feature/geometry invariants, `imports_api.py` owns import routes,
   `osm_import.py` (shared fetch→parse→upsert pipeline), `overpass.py`
   (Overpass client + tag parsing), `serializers.py` (row→API shapes),
   `road_network.py` (route costing/query assembly), `road_network_builder.py`
-  (batched pgRouting 4 topology publication), `schemas.py`, `models.py`,
-  `database.py`, `config.py`. Unit tests in
-  `backend/tests/` run without a database.
+  (batched pgRouting 4 topology publication), `road_network_job.py` (durable
+  rebuild ownership/progress), `route_result.py` (pure route geometry and
+  maneuver assembly), `schemas.py`, `models.py`, `database.py`, `config.py`.
+  Unit tests in `backend/tests/` run without a database; the opt-in integration
+  suite uses an isolated migrated PostGIS database.
 - Frontend (`frontend/src/`): `main.js` is the MapEditor orchestrator;
   `client.js` the read-only viewer. Both share `api.js` (the only HTTP
-  client; throws `ApiError` with status). `route-ui.js` owns route picking,
-  `road-network-ui.js` owns rebuild polling, `road-editing.js` owns road draft,
-  validation, and endpoint-snapping rules, and `road-options.js` owns the
-  controlled road form catalog and speed defaults. Both map pages share
+  client; throws `ApiError` with status). `editor-interactions.js` owns
+  map/drawing events, `feature-editor.js` owns selection and draft sessions,
+  and `feature-actions.js` owns persisted mutations. `route-ui.js` owns route
+  picking, `road-network-ui.js` owns rebuild polling, `road-editing.js` owns
+  road draft validation and endpoint-snapping rules, `road-options.js` owns
+  the controlled road catalog and speed defaults, `feature-form.js` owns the
+  feature form and API payload state, `editor-data.js` owns feature reads and
+  viewport freshness, `feature-search.js` owns search, `osm-import-ui.js` owns
+  import controls, `road-connectivity-ui.js` owns endpoint feedback and its
+  segment index, `snapping-ui.js` owns live snap targeting and feedback, and
+  `undo-stack.js` owns inverse operation history. Both map pages share
   `geometry.js`, `layers.js`
   (layer-id lists + guarded visibility helper), `map-setup.js`,
   `strings.js` (all user-visible copy, `t(key, params)`), `emoji-icons.js`,
@@ -153,13 +165,17 @@ npm run build
 python3 -B -m py_compile backend/*.py
 docker compose config
 docker compose exec backend python -m pytest tests -q
+./scripts/test-backend-integration.sh
 ./scripts/verify-stack.sh
 ```
 
 Run `./scripts/verify-stack.sh` only after the tile archive is built and the
 Compose stack is running. After frontend changes rebuild the image
 (`docker compose build frontend && docker compose up -d frontend`); the
-backend is volume-mounted and reloads on save.
+backend is volume-mounted and reloads on save through
+`docker-compose.override.yml`. Production deployment explicitly selects only
+`docker-compose.yml`, so it uses the immutable backend image and normal
+non-reloading command.
 
 ## Editing model
 

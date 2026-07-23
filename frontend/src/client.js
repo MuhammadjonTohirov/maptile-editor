@@ -1,9 +1,8 @@
-import maplibregl from 'maplibre-gl';
 import { featuresApi } from './api.js';
 import { enableEmojiIcons, featureAnchors } from './emoji-icons.js';
 import { setLayerVisibility } from './layers.js';
 import { addTileSymbolLayers, paintEditorAsBasemap, EDITOR_3D_LAYER } from './basemap-render.js';
-import { createMap, addBaseControls } from './map-setup.js';
+import { maplibregl, createMap, addBaseControls } from './map-setup.js';
 import { localizeDocument, t } from './strings.js';
 
 localizeDocument();

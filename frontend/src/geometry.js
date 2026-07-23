@@ -24,7 +24,7 @@ function coordinateKey([lng, lat]) {
   return `${lng},${lat}`;
 }
 
-function closestPointOnSegment([lng, lat], [aLng, aLat], [bLng, bLat]) {
+export function closestPointOnSegment([lng, lat], [aLng, aLat], [bLng, bLat]) {
   const scale = Math.cos((lat * Math.PI) / 180);
   const px = lng * scale;
   const ax = aLng * scale;
@@ -38,21 +38,29 @@ function closestPointOnSegment([lng, lat], [aLng, aLat], [bLng, bLat]) {
   const coordinate = [aLng + (bLng - aLng) * t, aLat + (bLat - aLat) * t];
   const dLng = (coordinate[0] - lng) * scale;
   const dLat = coordinate[1] - lat;
-  return { coordinate, distanceSquared: dLng * dLng + dLat * dLat };
+  return { coordinate, distanceSquared: dLng * dLng + dLat * dLat, fraction: t };
 }
 
 export function collectRoadSegments(features) {
   return features
     .filter((feature) => feature.properties?.feature_type === 'road' && feature.geometry?.type === 'LineString')
-    .flatMap((feature) => feature.geometry.coordinates.slice(1).map((position, index) => ({
-      owner: String(feature.id),
-      a: feature.geometry.coordinates[index],
-      b: position,
-      west: Math.min(feature.geometry.coordinates[index][0], position[0]),
-      south: Math.min(feature.geometry.coordinates[index][1], position[1]),
-      east: Math.max(feature.geometry.coordinates[index][0], position[0]),
-      north: Math.max(feature.geometry.coordinates[index][1], position[1]),
-    })));
+    .flatMap((feature) => {
+      const coordinates = feature.geometry.coordinates;
+      return coordinates.slice(1).map((position, index) => ({
+        owner: String(feature.id),
+        direction: feature.properties?.direction || 'bidirectional',
+        sourceKind: feature.properties?.source_kind || 'unknown',
+        index,
+        aIsEndpoint: index === 0,
+        bIsEndpoint: index === coordinates.length - 2,
+        a: coordinates[index],
+        b: position,
+        west: Math.min(coordinates[index][0], position[0]),
+        south: Math.min(coordinates[index][1], position[1]),
+        east: Math.max(coordinates[index][0], position[0]),
+        north: Math.max(coordinates[index][1], position[1]),
+      }));
+    });
 }
 
 // Mousemove snapping and endpoint connectivity both ask for segments close to
@@ -62,6 +70,7 @@ export class RoadSegmentIndex {
     this.cellSize = cellSize;
     this.cells = new Map();
     this.longSegments = [];
+    this.segments = [];
     for (const segment of segments) this.add(segment);
   }
 
@@ -78,6 +87,7 @@ export class RoadSegmentIndex {
   }
 
   add(segment) {
+    this.segments.push(segment);
     const west = this.cell(segment.west);
     const east = this.cell(segment.east);
     const south = this.cell(segment.south);
@@ -105,6 +115,28 @@ export class RoadSegmentIndex {
       }
     }
     return found;
+  }
+
+  // Junction-span selection only inspects index cells crossed by the selected
+  // road segment. This finds manual endpoints attached to the middle of that
+  // segment without scanning every road in the viewport (or country).
+  candidatesForBounds(west, south, east, north, threshold = 0) {
+    const found = new Set(this.longSegments);
+    const latitude = (south + north) / 2;
+    const longitudeThreshold = threshold / Math.max(Math.cos((latitude * Math.PI) / 180), 0.01);
+    const queryWest = west - longitudeThreshold;
+    const queryEast = east + longitudeThreshold;
+    const querySouth = south - threshold;
+    const queryNorth = north + threshold;
+    for (let x = this.cell(queryWest); x <= this.cell(queryEast); x += 1) {
+      for (let y = this.cell(querySouth); y <= this.cell(queryNorth); y += 1) {
+        for (const segment of this.cells.get(this.key(x, y)) || []) found.add(segment);
+      }
+    }
+    return [...found].filter((segment) => (
+      segment.east >= queryWest && segment.west <= queryEast
+      && segment.north >= querySouth && segment.south <= queryNorth
+    ));
   }
 
   nearest(lng, lat, threshold, excludedOwner) {

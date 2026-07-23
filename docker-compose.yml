@@ -63,10 +63,10 @@ services:
     restart: "no"
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      target: production
     container_name: map-editor-backend
-    # Dev-only auto-reload; the image default runs without it (rule X4).
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     ports:
       # Loopback only: production traffic reaches the API same-origin via nginx
       # (/api). Direct :8000 is for local dev/docs, never the public interface.
@@ -85,8 +85,17 @@ services:
     depends_on:
       migrations:
         condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read()"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     volumes:
-      - ./backend:/app
       # The bulk-load transform SQL lives in scripts/; the backend runs it.
       - ./scripts:/scripts:ro
     dns:
@@ -94,6 +103,24 @@ services:
       - 8.8.4.4
       - 1.1.1.1
     restart: unless-stopped
+
+  backend-tests:
+    build:
+      context: ./backend
+      target: test
+    profiles: ["test"]
+    environment:
+      - DATABASE_URL=${TEST_DATABASE_URL:-postgresql+asyncpg://postgres:postgres@db:5432/mapdata}
+      - RUN_DB_INTEGRATION=${RUN_DB_INTEGRATION:-}
+      - JWT_SECRET=integration-test-secret
+      - ADMIN_USERNAME=
+      - ADMIN_PASSWORD=
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - ./scripts:/scripts:ro
 
   martin:
     image: ghcr.io/maplibre/martin:1.12.0
@@ -130,7 +157,7 @@ services:
       - "${FRONTEND_HOST_PORT:-3000}:80"
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
       martin:
         condition: service_healthy
     restart: unless-stopped

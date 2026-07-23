@@ -1,8 +1,11 @@
 """Application assembly only: middleware, routers, lifespan, health (rule B1)."""
+import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth_api
 import bulk_api
@@ -11,7 +14,11 @@ import imports_api
 import road_network_api
 from auth import ensure_bootstrap_admin
 from config import CORS_ORIGINS
+from database import engine, get_db
 from overpass import close_client
+
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -21,6 +28,7 @@ async def lifespan(app: FastAPI):
     await ensure_bootstrap_admin()
     yield
     await close_client()
+    await engine.dispose()
 
 
 app = FastAPI(title="Map Editor API", version="1.0.0", lifespan=lifespan)
@@ -47,5 +55,16 @@ async def root():
 
 
 @app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
+async def health_check(db: AsyncSession = Depends(get_db)):
+    """Readiness: only healthy when the API can execute a database query."""
+    try:
+        await db.execute(text("SELECT 1"))
+    except Exception as error:
+        logger.exception("Database readiness check failed")
+        raise HTTPException(status_code=503, detail="database_unavailable") from error
+    return {"status": "healthy", "database": "ready"}
+
+
+@app.get("/health/live")
+async def liveness_check():
+    return {"status": "alive"}

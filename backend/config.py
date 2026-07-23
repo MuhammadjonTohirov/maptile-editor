@@ -37,6 +37,11 @@ AUTH_COOKIE_NAME = os.getenv("AUTH_COOKIE_NAME", "editor_session")
 # development works; turn on in production.
 AUTH_COOKIE_SECURE = os.getenv("AUTH_COOKIE_SECURE", "").lower() in ("1", "true", "yes")
 
+# Bound interactive route queries independently from long-running admin graph
+# builds. Nginx allows 180 seconds for the whole request; leave ample time to
+# return a controlled API error before that proxy deadline.
+ROUTE_STATEMENT_TIMEOUT_MS = int(os.getenv("ROUTE_STATEMENT_TIMEOUT_MS", "60000"))
+
 # First-run admin: created only when the users table is empty, so editing is
 # never wide open on a fresh install. Leave unset to seed no one.
 BOOTSTRAP_ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "")

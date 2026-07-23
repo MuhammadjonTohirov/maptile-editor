@@ -35,4 +35,42 @@ if (missing.length) {
   process.exit(1);
 }
 
+const layerById = new Map(style.layers.map((layer) => [layer.id, layer]));
+if (!layerById.get('editor-route-line-foot')?.paint?.['line-dasharray']) {
+  console.error('walking route layer must use a dashed line');
+  process.exit(1);
+}
+if (layerById.get('editor-route-line')?.paint?.['line-dasharray']) {
+  console.error('car route layer must remain solid');
+  process.exit(1);
+}
+if (!layerById.has('editor-route-point-labels')) {
+  console.error('route endpoints must have A/B labels');
+  process.exit(1);
+}
+for (const layerId of ['editor-road-direction-arrows', 'editor-road-turn-arrows']) {
+  if (!layerById.has(layerId)) {
+    console.error(`road editing guidance layer is missing: ${layerId}`);
+    process.exit(1);
+  }
+}
+if (layerById.has('editor-road-guidance-turns') || layerById.has('editor-road-guidance-turn-casing')) {
+  console.error('junction guidance must not draw connector-arm line layers');
+  process.exit(1);
+}
+const turnArrowLayout = layerById.get('editor-road-turn-arrows')?.layout;
+if (turnArrowLayout?.['icon-anchor'] !== 'center' || turnArrowLayout?.['icon-size'] !== 0.625) {
+  console.error('junction arrows must be half-size and centred around their offset');
+  process.exit(1);
+}
+const turnArrowOffsets = JSON.stringify(turnArrowLayout?.['icon-offset']);
+if (!turnArrowOffsets.includes('uturn') || !turnArrowOffsets.includes('56') || !turnArrowOffsets.includes('-64')) {
+  console.error('turn and restricted U-turn controls must stay separated from the node');
+  process.exit(1);
+}
+if (layerById.get('editor-road-turn-arrows')?.minzoom !== 20) {
+  console.error('junction arrows must stay hidden below zoom 20');
+  process.exit(1);
+}
+
 console.log('editor.json is valid and all referenced layer ids exist');

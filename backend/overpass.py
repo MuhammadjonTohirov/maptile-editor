@@ -3,7 +3,6 @@ import time
 from typing import Optional
 
 import httpx
-from fastapi import HTTPException
 
 # Ordered by observed reliability: the main instance fails fast when
 # overloaded, the VK mirror is a healthy full-planet instance close to
@@ -31,6 +30,10 @@ _ATTEMPT_ROUNDS = 2
 _OVERALL_BUDGET_S = 100.0
 
 _client: Optional[httpx.AsyncClient] = None
+
+
+class OverpassUnavailable(RuntimeError):
+    pass
 
 
 def _get_client() -> httpx.AsyncClient:
@@ -69,12 +72,9 @@ async def fetch_overpass(query: str) -> dict:
             except (httpx.HTTPError, ValueError) as error:
                 failures.append(describe_failure(url, error))
 
-    raise HTTPException(
-        status_code=502,
-        detail=(
-            "All Overpass mirrors are busy or unreachable; retry in a minute "
-            "or zoom in to import a smaller area. " + "; ".join(failures)
-        ),
+    raise OverpassUnavailable(
+        "All Overpass mirrors are busy or unreachable; retry in a minute "
+        "or zoom in to import a smaller area. " + "; ".join(failures)
     )
 
 
